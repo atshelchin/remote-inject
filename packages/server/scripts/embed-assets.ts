@@ -111,9 +111,25 @@ export interface EmbeddedAsset {
 }
 
 // Check if running as compiled executable
-// In compiled mode, Bun.main starts with /$bunfs/ (Bun's virtual filesystem for bundled files)
-export const IS_COMPILED = typeof Bun !== 'undefined' &&
-  (Bun.main?.startsWith('/$bunfs/') || Bun.main?.startsWith('$bunfs/'))
+// Multiple detection methods for reliability across platforms
+export const IS_COMPILED = (() => {
+  if (typeof Bun === 'undefined') return false
+
+  // Method 1: Check if Bun.main starts with bunfs paths (Bun's virtual filesystem)
+  const main = Bun.main || ''
+  if (main.startsWith('/$bunfs/') || main.startsWith('$bunfs/')) return true
+
+  // Method 2: Check import.meta.path for bunfs
+  const metaPath = import.meta.path || ''
+  if (metaPath.includes('/$bunfs/') || metaPath.includes('$bunfs/')) return true
+
+  // Method 3: Check if main script is a file (dev mode) vs embedded
+  // In dev mode, Bun.main points to .ts/.js file; in compiled mode it doesn't
+  const isScript = main.endsWith('.ts') || main.endsWith('.js')
+  if (!isScript && main.length > 0) return true
+
+  return false
+})()
 
 const assets: Record<string, EmbeddedAsset> = {
 ${allFiles.map(f => `  ${JSON.stringify(f.path)}: {
@@ -160,6 +176,7 @@ export function getAssetString(path: string): string | null {
 
 /**
  * Get all template files
+ * In compiled mode, include() paths are prefixed with @ to use cache lookup
  */
 export function getTemplates(): Record<string, string> {
   const templates: Record<string, string> = {}
@@ -167,7 +184,11 @@ export function getTemplates(): Record<string, string> {
   for (const [path, asset] of Object.entries(assets)) {
     if (path.startsWith('/templates/') && path.endsWith('.eta')) {
       const name = path.replace('/templates/', '').replace('.eta', '')
-      templates[name] = asset.content
+      // Pre-process template: add @ prefix to include() calls
+      // This tells Eta to look up from cache instead of resolving file paths
+      let content = asset.content
+      content = content.replace(/include\\s*\\(\\s*['"](?!@)/g, "include('@")
+      templates['@' + name] = content
     }
   }
 

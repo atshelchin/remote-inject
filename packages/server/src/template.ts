@@ -27,17 +27,29 @@ try {
 await loadExternalConfig()
 
 // Initialize Eta - use different config for compiled vs development mode
-const eta = isCompiled
-  ? new Eta({
-      // In compiled mode, don't set views - we'll use renderString
-      cache: true,
-      autoEscape: true,
-    })
-  : new Eta({
-      views: join(import.meta.dir, '../templates'),
-      cache: process.env.NODE_ENV === 'production',
-      autoEscape: true,
-    })
+let eta: InstanceType<typeof Eta>
+
+if (isCompiled && embeddedTemplates) {
+  // In compiled mode, use @ prefix for all template names
+  // This tells Eta to look up from cache instead of resolving file paths
+  eta = new Eta({
+    cache: true,
+    autoEscape: true,
+  })
+
+  // Load all templates into Eta's cache
+  for (const [name, content] of Object.entries(embeddedTemplates)) {
+    eta.loadTemplate(name, content)
+  }
+  console.log(`[Template] Loaded ${Object.keys(embeddedTemplates).length} templates into cache`)
+} else {
+  // Development mode: use file-based templates
+  eta = new Eta({
+    views: join(import.meta.dir, '../templates'),
+    cache: process.env.NODE_ENV === 'production',
+    autoEscape: true,
+  })
+}
 
 // i18n translations
 const translations: Record<string, Record<string, string>> = {
@@ -127,6 +139,18 @@ const translations: Record<string, Record<string, string>> = {
     'demo.getBalance': '获取余额',
     'demo.signMessage': '签名消息',
     'demo.sendTransaction': '发送交易',
+    'demo.switchChain': '切换链',
+    'demo.requestAccounts': '请求授权',
+    'demo.signTypedData': 'EIP712 签名',
+    'demo.readContract': '读取合约',
+    'demo.estimateGas': '估算 Gas',
+    'demo.getBlockNumber': '获取区块',
+    'demo.chainActions': '链操作',
+    'demo.accountActions': '账户操作',
+    'demo.signActions': '签名操作',
+    'demo.contractActions': '合约操作',
+    'demo.selectChain': '选择目标链',
+    'demo.currentChain': '当前链',
   },
 
   en: {
@@ -215,6 +239,18 @@ const translations: Record<string, Record<string, string>> = {
     'demo.getBalance': 'Get Balance',
     'demo.signMessage': 'Sign Message',
     'demo.sendTransaction': 'Send Transaction',
+    'demo.switchChain': 'Switch Chain',
+    'demo.requestAccounts': 'Request Auth',
+    'demo.signTypedData': 'EIP712 Sign',
+    'demo.readContract': 'Read Contract',
+    'demo.estimateGas': 'Estimate Gas',
+    'demo.getBlockNumber': 'Get Block',
+    'demo.chainActions': 'Chain Actions',
+    'demo.accountActions': 'Account Actions',
+    'demo.signActions': 'Sign Actions',
+    'demo.contractActions': 'Contract Actions',
+    'demo.selectChain': 'Select target chain',
+    'demo.currentChain': 'Current Chain',
   },
 }
 
@@ -298,16 +334,10 @@ export function render(
   templateName: string,
   data: Record<string, unknown> = {}
 ): string {
-  if (isCompiled && embeddedTemplates) {
-    // In compiled mode, use embedded template content
-    const templateContent = embeddedTemplates[templateName]
-    if (!templateContent) {
-      throw new Error(`Template not found: ${templateName}`)
-    }
-    return eta.renderString(templateContent, data)
-  }
-  // Development mode: use file-based templates
-  return eta.render(templateName, data)
+  // In compiled mode, use @ prefix to look up from cache
+  // In development mode, use normal path resolution
+  const name = isCompiled ? '@' + templateName : templateName
+  return eta.render(name, data)
 }
 
 // Parse cookies from request

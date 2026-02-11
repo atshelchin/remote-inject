@@ -693,6 +693,14 @@
                 chainId: currentChainId,
               }))
               break
+
+            case 'accountSwitch':
+              // DApp switched to a different account for operations
+              if (message.address) {
+                console.log('[Bridge] DApp switched account to:', message.address)
+                document.getElementById('walletAddress').textContent = formatAddress(message.address)
+              }
+              break
           }
         } catch (error) {
           console.error('Message handling failed:', error)

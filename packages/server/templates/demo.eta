@@ -93,6 +93,7 @@
       border-radius: 20px;
       font-size: 14px;
       font-weight: 500;
+      margin-bottom:12px;
     }
 
     .status-badge.disconnected {
@@ -230,6 +231,286 @@
       border-color: var(--color-accent);
       color: white;
     }
+
+    /* Action groups */
+    .action-group {
+      margin-bottom: 20px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--color-border);
+    }
+
+    .action-group:last-of-type {
+      border-bottom: none;
+      margin-bottom: 0;
+    }
+
+    .action-group-title {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--color-text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 12px;
+    }
+
+    .chain-switch-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex: 1;
+    }
+
+    /* Unified select styling - matches btn-secondary */
+    .styled-select {
+      appearance: none;
+      -webkit-appearance: none;
+      padding: 12px 36px 12px 16px;
+      border: none;
+      border-radius: var(--radius-md);
+      background: var(--color-bg-tertiary);
+      color: var(--color-text-primary);
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 14px center;
+    }
+
+    .styled-select:hover:not(:disabled) {
+      filter: brightness(0.95);
+    }
+
+    .styled-select:focus {
+      outline: none;
+      box-shadow: 0 0 0 2px var(--color-accent);
+    }
+
+    .styled-select:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .styled-select option {
+      background: var(--color-bg-secondary);
+      color: var(--color-text-primary);
+      padding: 8px;
+    }
+
+    .chain-select {
+      min-width: 160px;
+    }
+
+    /* Account list in status card */
+    .account-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    .account-item {
+      padding: 8px 14px;
+      background: var(--color-bg-tertiary);
+      border: 2px solid transparent;
+      border-radius: var(--radius-md);
+      font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+      font-size: 13px;
+      color: var(--color-text-primary);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .account-item:hover:not([data-empty]) {
+      border-color: var(--color-accent);
+    }
+
+    .account-item.active {
+      background: var(--color-accent);
+      color: white;
+      border-color: var(--color-accent);
+    }
+
+    .account-item.active::before {
+      content: '● ';
+    }
+
+    .account-item[data-empty] {
+      cursor: default;
+      color: var(--color-text-muted);
+    }
+
+    .account-count {
+      font-size: 11px;
+      color: var(--color-text-muted);
+      font-weight: normal;
+      margin-left: 4px;
+    }
+
+    /* Chain list */
+    .chain-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .chain-chip {
+      padding: 8px 14px;
+      background: var(--color-bg-tertiary);
+      border: 2px solid transparent;
+      border-radius: var(--radius-md);
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--color-text-primary);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .chain-chip:hover:not(:disabled):not(.current) {
+      border-color: var(--color-accent);
+    }
+
+    .chain-chip:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .chain-chip.current {
+      background: var(--color-success-bg);
+      color: var(--color-success);
+      border-color: var(--color-success);
+      cursor: default;
+    }
+
+    .chain-chip.current::before {
+      content: '✓ ';
+    }
+
+    /* Action items with description */
+    .action-items {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .action-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .action-item .btn {
+      min-width: 120px;
+    }
+
+    .action-desc {
+      font-size: 13px;
+      color: var(--color-text-muted);
+    }
+
+    /* Contract form styles */
+    .contract-form {
+      background: var(--color-bg-tertiary);
+      border-radius: var(--radius-md);
+      padding: 16px;
+    }
+
+    .contract-form .form-title {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--color-text-secondary);
+      margin-bottom: 12px;
+    }
+
+    .contract-form .form-row {
+      display: flex;
+      gap: 8px;
+      align-items: flex-start;
+    }
+
+    .contract-form .form-input {
+      flex: 1;
+      padding: 10px 14px;
+      font-size: 13px;
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-sm);
+      background: var(--color-bg-secondary);
+      color: var(--color-text-primary);
+      font-family: 'SF Mono', Monaco, monospace;
+    }
+
+    .contract-form .form-input:focus {
+      outline: none;
+      border-color: var(--color-accent);
+    }
+
+    .contract-form .form-input::placeholder {
+      color: var(--color-text-muted);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
+
+    .contract-form textarea.form-input {
+      resize: vertical;
+      min-height: 60px;
+    }
+
+    /* Method params */
+    .method-param {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+
+    .method-param label {
+      min-width: 120px;
+      font-size: 12px;
+      color: var(--color-text-secondary);
+      font-family: 'SF Mono', Monaco, monospace;
+    }
+
+    .method-param .param-type {
+      font-size: 11px;
+      color: var(--color-text-muted);
+      padding: 2px 6px;
+      background: var(--color-bg-secondary);
+      border-radius: 4px;
+    }
+
+    .method-info {
+      font-size: 12px;
+      color: var(--color-text-muted);
+      padding: 8px 12px;
+      background: var(--color-bg-secondary);
+      border-radius: var(--radius-sm);
+      margin-bottom: 8px;
+    }
+
+    .method-info .method-type {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 500;
+      margin-right: 8px;
+    }
+
+    .method-info .method-type.view {
+      background: var(--color-success-bg);
+      color: var(--color-success);
+    }
+
+    .method-info .method-type.payable {
+      background: var(--color-warning-bg);
+      color: var(--color-warning);
+    }
+
+    .method-info .method-type.nonpayable {
+      background: var(--color-accent);
+      color: white;
+    }
   </style>
 </head>
 <body>
@@ -324,9 +605,11 @@
         <span id="statusText"><%= it.t('demo.notConnected') %></span>
       </div>
       <div class="info-grid" id="walletInfo" style="display: none;">
-        <div class="info-item">
-          <div class="info-label"><%= it.t('bridge.address') %></div>
-          <div class="info-value" id="walletAddress">-</div>
+        <div class="info-item" style="grid-column: 1 / -1;">
+          <div class="info-label"><%= it.t('bridge.address') %> <span id="accountCount" class="account-count"></span></div>
+          <div class="account-list" id="accountList">
+            <div class="account-item" data-empty>-</div>
+          </div>
         </div>
         <div class="info-item">
           <div class="info-label"><% if (it.locale === 'zh') { %>链 ID<% } else { %>Chain ID<% } %></div>
@@ -342,13 +625,100 @@
     <!-- Test Card -->
     <div class="card">
       <h2><%= it.t('demo.testActions') %></h2>
-      <div class="btn-group">
-        <button class="btn btn-secondary" id="btnAccounts" onclick="testGetAccounts()" disabled><%= it.t('demo.getAccounts') %></button>
-        <button class="btn btn-secondary" id="btnChainId" onclick="testGetChainId()" disabled><%= it.t('demo.getChainId') %></button>
-        <button class="btn btn-secondary" id="btnBalance" onclick="testGetBalance()" disabled><%= it.t('demo.getBalance') %></button>
-        <button class="btn btn-primary" id="btnSign" onclick="testPersonalSign()" disabled><%= it.t('demo.signMessage') %></button>
-        <button class="btn btn-primary" id="btnSend" onclick="testSendTransaction()" disabled><%= it.t('demo.sendTransaction') %></button>
+
+      <!-- Chain Actions -->
+      <div class="action-group">
+        <h3 class="action-group-title"><%= it.t('demo.chainActions') %></h3>
+        <div class="btn-group">
+          <button class="btn btn-secondary" id="btnChainId" onclick="testGetChainId()" disabled><%= it.t('demo.getChainId') %></button>
+          <button class="btn btn-secondary" id="btnBlockNumber" onclick="testGetBlockNumber()" disabled><%= it.t('demo.getBlockNumber') %></button>
+        </div>
+        <div class="chain-list" id="chainList">
+          <button class="chain-chip" data-chain="0x1" disabled>Ethereum</button>
+          <button class="chain-chip" data-chain="0x89" disabled>Polygon</button>
+          <button class="chain-chip" data-chain="0xa4b1" disabled>Arbitrum</button>
+          <button class="chain-chip" data-chain="0xa" disabled>Optimism</button>
+          <button class="chain-chip" data-chain="0x38" disabled>BSC</button>
+          <button class="chain-chip" data-chain="0xa86a" disabled>Avalanche</button>
+          <button class="chain-chip" data-chain="0x2105" disabled>Base</button>
+          <button class="chain-chip" data-chain="0xaa36a7" disabled>Sepolia</button>
+        </div>
       </div>
+
+      <!-- Account Actions -->
+      <div class="action-group">
+        <h3 class="action-group-title"><%= it.t('demo.accountActions') %></h3>
+        <div class="action-items">
+          <div class="action-item">
+            <button class="btn btn-secondary" id="btnAccounts" onclick="testGetAccounts()" disabled><%= it.t('demo.getAccounts') %></button>
+            <span class="action-desc"><% if (it.locale === 'zh') { %>查询已授权的账户列表<% } else { %>Query authorized accounts<% } %></span>
+          </div>
+          <div class="action-item">
+            <button class="btn btn-secondary" id="btnRequestAccounts" onclick="testRequestAccounts()" disabled><%= it.t('demo.requestAccounts') %></button>
+            <span class="action-desc"><% if (it.locale === 'zh') { %>弹出钱包请求用户授权<% } else { %>Popup wallet for user authorization<% } %></span>
+          </div>
+          <div class="action-item">
+            <button class="btn btn-secondary" id="btnBalance" onclick="testGetBalance()" disabled><%= it.t('demo.getBalance') %></button>
+            <span class="action-desc"><% if (it.locale === 'zh') { %>查询当前账户余额<% } else { %>Query current account balance<% } %></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Sign Actions -->
+      <div class="action-group">
+        <h3 class="action-group-title"><%= it.t('demo.signActions') %></h3>
+        <div class="btn-group">
+          <button class="btn btn-primary" id="btnSign" onclick="testPersonalSign()" disabled><%= it.t('demo.signMessage') %></button>
+          <button class="btn btn-primary" id="btnSignTypedData" onclick="testSignTypedData()" disabled><%= it.t('demo.signTypedData') %></button>
+          <button class="btn btn-primary" id="btnSend" onclick="testSendTransaction()" disabled><%= it.t('demo.sendTransaction') %></button>
+        </div>
+      </div>
+
+      <!-- Contract Actions -->
+      <div class="action-group">
+        <h3 class="action-group-title"><%= it.t('demo.contractActions') %></h3>
+        <div class="btn-group">
+          <button class="btn btn-secondary" id="btnReadContract" onclick="testReadContract()" disabled><%= it.t('demo.readContract') %></button>
+          <button class="btn btn-secondary" id="btnEstimateGas" onclick="testEstimateGas()" disabled><%= it.t('demo.estimateGas') %></button>
+        </div>
+
+        <!-- Custom Transfer -->
+        <div class="contract-form" style="margin-top: 16px;">
+          <div class="form-title"><% if (it.locale === 'zh') { %>自定义转账<% } else { %>Custom Transfer<% } %></div>
+          <div class="form-row">
+            <input type="text" class="form-input" id="transferTo" placeholder="<% if (it.locale === 'zh') { %>接收地址 (0x...)<%} else {%>Recipient Address (0x...)<%}%>">
+            <input type="text" class="form-input" id="transferAmount" placeholder="<% if (it.locale === 'zh') { %>金额 (ETH)<%} else {%>Amount (ETH)<%}%>" style="width: 140px;">
+            <button class="btn btn-primary" id="btnCustomTransfer" onclick="testCustomTransfer()" disabled><% if (it.locale === 'zh') { %>发送<% } else { %>Send<% } %></button>
+          </div>
+        </div>
+
+        <!-- Custom Contract Call -->
+        <div class="contract-form" style="margin-top: 16px;">
+          <div class="form-title"><% if (it.locale === 'zh') { %>自定义合约调用<% } else { %>Custom Contract Call<% } %></div>
+          <div class="form-row">
+            <input type="text" class="form-input" id="contractAddress" placeholder="<% if (it.locale === 'zh') { %>合约地址 (0x...)<%} else {%>Contract Address (0x...)<%}%>">
+          </div>
+          <div class="form-row" style="margin-top: 8px;">
+            <textarea class="form-input" id="contractAbi" rows="3" placeholder="<% if (it.locale === 'zh') { %>ABI (JSON 数组，例如: [{&quot;name&quot;:&quot;balanceOf&quot;,...}])<%} else {%>ABI (JSON array, e.g.: [{&quot;name&quot;:&quot;balanceOf&quot;,...}])<%}%>"></textarea>
+          </div>
+          <div class="form-row" style="margin-top: 8px;">
+            <button class="btn btn-secondary" id="btnParseAbi" onclick="parseContractAbi()"><% if (it.locale === 'zh') { %>解析 ABI<% } else { %>Parse ABI<% } %></button>
+          </div>
+          <div id="abiMethodsContainer" class="hidden" style="margin-top: 12px;">
+            <div class="form-row">
+              <select class="styled-select" id="abiMethodSelect" onchange="onMethodSelect()">
+                <option value=""><% if (it.locale === 'zh') { %>选择方法<% } else { %>Select Method<% } %></option>
+              </select>
+            </div>
+            <div id="methodParamsContainer" style="margin-top: 8px;"></div>
+            <div class="form-row" style="margin-top: 12px;">
+              <button class="btn btn-secondary" id="btnCallContract" onclick="testCallContract()" disabled><% if (it.locale === 'zh') { %>读取<% } else { %>Read<% } %></button>
+              <button class="btn btn-primary" id="btnSendContract" onclick="testSendContract()" disabled><% if (it.locale === 'zh') { %>写入<% } else { %>Write<% } %></button>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div class="result-box">
         <pre id="resultOutput">// <% if (it.locale === 'zh') { %>测试结果将显示在这里<% } else { %>Test results will appear here<% } %></pre>
       </div>
@@ -804,6 +1174,143 @@
 
     // Global variables
     let provider = null
+    let currentAccount = null  // Currently selected account for operations
+
+    // Get current account (selected or first available)
+    function getCurrentAccount() {
+      return currentAccount || (provider?.accounts?.[0] ?? null)
+    }
+
+    // Update account list with all available accounts
+    function updateAccountSelector(accounts) {
+      const listEl = document.getElementById('accountList')
+      const countSpan = document.getElementById('accountCount')
+
+      if (!listEl) return
+
+      // Clear existing items
+      listEl.innerHTML = ''
+
+      if (!accounts || accounts.length === 0) {
+        listEl.innerHTML = '<div class="account-item" data-empty>-</div>'
+        if (countSpan) countSpan.textContent = ''
+        return
+      }
+
+      // Add all accounts as clickable items
+      accounts.forEach((account, index) => {
+        const item = document.createElement('div')
+        item.className = 'account-item'
+        item.dataset.address = account
+        const abbrev = account.slice(0, 8) + '...' + account.slice(-6)
+        item.textContent = accounts.length > 1 ? `[${index + 1}] ${abbrev}` : abbrev
+        item.title = account  // Full address on hover
+        item.onclick = () => onAccountSelect(account)
+        listEl.appendChild(item)
+      })
+
+      // Show account count
+      if (countSpan) {
+        countSpan.textContent = `(${accounts.length})`
+      }
+
+      // Set current selection
+      if (currentAccount && accounts.includes(currentAccount)) {
+        setActiveAccount(currentAccount)
+      } else {
+        currentAccount = accounts[0]
+        setActiveAccount(currentAccount)
+      }
+    }
+
+    // Set visual active state for account
+    function setActiveAccount(address) {
+      document.querySelectorAll('.account-item').forEach(item => {
+        item.classList.toggle('active', item.dataset.address === address)
+      })
+    }
+
+    // Handle account selection change
+    function onAccountSelect(address) {
+      if (!address) return
+      currentAccount = address
+      setActiveAccount(address)
+      const abbrev = address.slice(0, 8) + '...' + address.slice(-6)
+      logResult(LOCALE === 'zh' ? `已切换到账户: ${abbrev}` : `Switched to account: ${abbrev}`, 'info')
+
+      // Notify bridge about account switch
+      if (provider && provider.ws && provider.ws.readyState === WebSocket.OPEN) {
+        provider.ws.send(JSON.stringify({
+          type: 'accountSwitch',
+          address: address
+        }))
+      }
+    }
+
+    // Selected chain for switching
+    let selectedChainId = '0x1'
+
+    // Initialize chain chip click handlers
+    function initChainChips() {
+      document.querySelectorAll('.chain-chip').forEach(chip => {
+        chip.onclick = () => selectChain(chip.dataset.chain)
+      })
+    }
+
+    // Select a chain chip and trigger switch
+    function selectChain(chainId) {
+      if (!provider || !provider.isConnected) return
+
+      selectedChainId = chainId
+
+      // If clicking current chain, do nothing
+      const currentChainId = provider.chainId?.toLowerCase()
+      if (chainId.toLowerCase() === currentChainId) {
+        logResult(LOCALE === 'zh' ? `已在此链上` : `Already on this chain`, 'info')
+        return
+      }
+
+      // Trigger switch
+      testSwitchChain()
+    }
+
+    // Update current chain indicator (normalize chainId format)
+    function updateCurrentChain(chainId) {
+      const normalizedChainId = chainId?.toLowerCase()
+      console.log('[Demo] updateCurrentChain:', chainId, 'normalized:', normalizedChainId)
+
+      document.querySelectorAll('.chain-chip').forEach(chip => {
+        const chipChainId = chip.dataset.chain?.toLowerCase()
+        const isCurrent = chipChainId === normalizedChainId
+        chip.classList.toggle('current', isCurrent)
+      })
+    }
+
+    // Initialize on load
+    initChainChips()
+
+    // Try to fetch all authorized accounts using wallet_getPermissions
+    async function fetchAllAuthorizedAccounts() {
+      if (!provider || !provider.isConnected) return
+
+      try {
+        const permissions = await provider.request({ method: 'wallet_getPermissions' })
+        const ethAccountsPermission = permissions.find(p => p.parentCapability === 'eth_accounts')
+
+        if (ethAccountsPermission?.caveats) {
+          const caveat = ethAccountsPermission.caveats.find(c => c.type === 'restrictReturnedAccounts')
+          if (caveat?.value && Array.isArray(caveat.value) && caveat.value.length > 0) {
+            logResult(LOCALE === 'zh' ? `获取到 ${caveat.value.length} 个授权账户` : `Found ${caveat.value.length} authorized accounts`, 'info')
+            updateAccountSelector(caveat.value)
+            return caveat.value
+          }
+        }
+      } catch (error) {
+        // wallet_getPermissions not supported, use default accounts
+        console.log('[Demo] wallet_getPermissions not supported:', error.message)
+      }
+      return null
+    }
 
     // Update status display
     function updateStatus(status, text) {
@@ -813,10 +1320,31 @@
       badge.className = `status-badge ${status}`
       statusText.textContent = text
 
-      const buttons = ['btnAccounts', 'btnChainId', 'btnBalance', 'btnSign', 'btnSend']
+      const buttons = [
+        'btnAccounts', 'btnChainId', 'btnBalance', 'btnSign', 'btnSend',
+        'btnRequestAccounts', 'btnSignTypedData',
+        'btnReadContract', 'btnEstimateGas', 'btnBlockNumber',
+        'btnCustomTransfer'
+      ]
       buttons.forEach(id => {
-        document.getElementById(id).disabled = status !== 'connected'
+        const el = document.getElementById(id)
+        if (el) el.disabled = status !== 'connected'
       })
+
+      // Enable/disable chain chips
+      document.querySelectorAll('.chain-chip').forEach(chip => {
+        chip.disabled = status !== 'connected'
+      })
+
+      // Enable/disable contract call buttons based on selected method
+      if (selectedMethod) {
+        const isView = selectedMethod.stateMutability === 'view' || selectedMethod.stateMutability === 'pure' || selectedMethod.constant
+        document.getElementById('btnCallContract').disabled = status !== 'connected'
+        document.getElementById('btnSendContract').disabled = status !== 'connected' || isView
+      } else {
+        document.getElementById('btnCallContract').disabled = true
+        document.getElementById('btnSendContract').disabled = true
+      }
 
       document.getElementById('walletInfo').style.display = status === 'connected' ? 'block' : 'none'
     }
@@ -855,13 +1383,25 @@
         provider = new RemoteProvider()
 
         // Listen for events
-        provider.on('connect', (info) => {
+        provider.on('connect', async (info) => {
           logResult(LOCALE === 'zh' ? `已连接，链 ID: ${info.chainId}` : `Connected, Chain ID: ${info.chainId}`, 'info')
           updateStatus('connected', t('bridge.connected'))
 
-          document.getElementById('walletAddress').textContent = provider.accounts[0]
           document.getElementById('walletChainId').textContent = provider.chainId
           document.getElementById('walletSession').textContent = provider.session.id
+          updateCurrentChain(provider.chainId)
+
+          // Always show the account from connect message first
+          console.log('[Demo] provider.accounts:', provider.accounts)
+          if (provider.accounts && provider.accounts.length > 0) {
+            updateAccountSelector(provider.accounts)
+          }
+
+          // Then try to get all authorized accounts
+          const allAccounts = await fetchAllAuthorizedAccounts()
+          if (allAccounts && allAccounts.length > 0) {
+            updateAccountSelector(allAccounts)
+          }
         })
 
         provider.on('disconnect', (info) => {
@@ -888,12 +1428,13 @@
         provider.on('chainChanged', (chainId) => {
           logResult(LOCALE === 'zh' ? `链已切换: ${chainId}` : `Chain changed: ${chainId}`, 'info')
           document.getElementById('walletChainId').textContent = chainId
+          updateCurrentChain(chainId)
         })
 
         provider.on('accountsChanged', (accounts) => {
           if (accounts.length > 0) {
-            logResult(LOCALE === 'zh' ? `账户已切换: ${accounts[0]}` : `Account changed: ${accounts[0]}`, 'info')
-            document.getElementById('walletAddress').textContent = accounts[0]
+            logResult(LOCALE === 'zh' ? `账户已更新，共 ${accounts.length} 个账户` : `Accounts updated, ${accounts.length} account(s)`, 'info')
+            updateAccountSelector(accounts)
           }
         })
 
@@ -980,13 +1521,24 @@
         provider = new RemoteProvider()
 
         // Listen for events (same as startConnect)
-        provider.on('connect', (info) => {
+        provider.on('connect', async (info) => {
           logResult(LOCALE === 'zh' ? `已连接，链 ID: ${info.chainId}` : `Connected, Chain ID: ${info.chainId}`, 'info')
           updateStatus('connected', t('bridge.connected'))
 
-          document.getElementById('walletAddress').textContent = provider.accounts[0]
           document.getElementById('walletChainId').textContent = provider.chainId
           document.getElementById('walletSession').textContent = provider.session.id
+          updateCurrentChain(provider.chainId)
+
+          // Always show the account from connect message first
+          if (provider.accounts && provider.accounts.length > 0) {
+            updateAccountSelector(provider.accounts)
+          }
+
+          // Then try to get all authorized accounts
+          const allAccounts = await fetchAllAuthorizedAccounts()
+          if (allAccounts && allAccounts.length > 0) {
+            updateAccountSelector(allAccounts)
+          }
         })
 
         provider.on('disconnect', (info) => {
@@ -1012,12 +1564,13 @@
         provider.on('chainChanged', (chainId) => {
           logResult(LOCALE === 'zh' ? `链已切换: ${chainId}` : `Chain changed: ${chainId}`, 'info')
           document.getElementById('walletChainId').textContent = chainId
+          updateCurrentChain(chainId)
         })
 
         provider.on('accountsChanged', (accounts) => {
           if (accounts.length > 0) {
-            logResult(LOCALE === 'zh' ? `账户已切换: ${accounts[0]}` : `Account changed: ${accounts[0]}`, 'info')
-            document.getElementById('walletAddress').textContent = accounts[0]
+            logResult(LOCALE === 'zh' ? `账户已更新，共 ${accounts.length} 个账户` : `Accounts updated, ${accounts.length} account(s)`, 'info')
+            updateAccountSelector(accounts)
           }
         })
 
@@ -1105,12 +1658,33 @@
       }
     }
 
-    // Test: get accounts
+    // Test: get accounts - tries wallet_getPermissions first for all authorized accounts
     window.testGetAccounts = async function() {
       try {
-        logResult(LOCALE === 'zh' ? '调用 eth_accounts...' : 'Calling eth_accounts...', 'info')
+        // First try wallet_getPermissions to get ALL authorized accounts
+        logResult(LOCALE === 'zh' ? '调用 wallet_getPermissions 获取所有授权账户...' : 'Calling wallet_getPermissions to get all authorized accounts...', 'info')
+
+        try {
+          const permissions = await provider.request({ method: 'wallet_getPermissions' })
+          const ethAccountsPermission = permissions.find(p => p.parentCapability === 'eth_accounts')
+
+          if (ethAccountsPermission?.caveats) {
+            const caveat = ethAccountsPermission.caveats.find(c => c.type === 'restrictReturnedAccounts')
+            if (caveat?.value && Array.isArray(caveat.value)) {
+              const allAccounts = caveat.value
+              logResult(LOCALE === 'zh' ? `所有授权账户 (${allAccounts.length}): ${JSON.stringify(allAccounts)}` : `All authorized accounts (${allAccounts.length}): ${JSON.stringify(allAccounts)}`)
+              // Update the account selector with all accounts
+              updateAccountSelector(allAccounts)
+              return
+            }
+          }
+        } catch (permError) {
+          logResult(LOCALE === 'zh' ? `wallet_getPermissions 不支持，回退到 eth_accounts` : `wallet_getPermissions not supported, falling back to eth_accounts`, 'info')
+        }
+
+        // Fallback to eth_accounts (only returns current account)
         const accounts = await provider.request({ method: 'eth_accounts' })
-        logResult(LOCALE === 'zh' ? `账户: ${JSON.stringify(accounts)}` : `Accounts: ${JSON.stringify(accounts)}`)
+        logResult(LOCALE === 'zh' ? `当前账户: ${JSON.stringify(accounts)}` : `Current accounts: ${JSON.stringify(accounts)}`)
       } catch (error) {
         logResult(LOCALE === 'zh' ? `错误: ${error.message}` : `Error: ${error.message}`, 'error')
       }
@@ -1130,10 +1704,11 @@
     // Test: get balance
     window.testGetBalance = async function() {
       try {
-        logResult(LOCALE === 'zh' ? '调用 eth_getBalance...' : 'Calling eth_getBalance...', 'info')
+        const account = getCurrentAccount()
+        logResult(LOCALE === 'zh' ? `调用 eth_getBalance (${account.slice(0,8)}...)...` : `Calling eth_getBalance (${account.slice(0,8)}...)...`, 'info')
         const balance = await provider.request({
           method: 'eth_getBalance',
-          params: [provider.accounts[0], 'latest'],
+          params: [account, 'latest'],
         })
         const eth = parseInt(balance, 16) / 1e18
         logResult(LOCALE === 'zh' ? `余额: ${balance} (${eth.toFixed(6)} ETH)` : `Balance: ${balance} (${eth.toFixed(6)} ETH)`)
@@ -1145,6 +1720,7 @@
     // Test: sign message
     window.testPersonalSign = async function() {
       try {
+        const account = getCurrentAccount()
         const message = 'Hello from Remote Inject! ' + new Date().toISOString()
         logResult(LOCALE === 'zh' ? `调用 personal_sign: "${message}"` : `Calling personal_sign: "${message}"`, 'info')
 
@@ -1152,7 +1728,7 @@
           method: 'personal_sign',
           params: [
             '0x' + Array.from(new TextEncoder().encode(message)).map(b => b.toString(16).padStart(2, '0')).join(''),
-            provider.accounts[0],
+            account,
           ],
         })
         logResult(LOCALE === 'zh' ? `签名: ${signature}` : `Signature: ${signature}`)
@@ -1164,16 +1740,678 @@
     // Test: send transaction
     window.testSendTransaction = async function() {
       try {
+        const account = getCurrentAccount()
         logResult(LOCALE === 'zh' ? '调用 eth_sendTransaction (发送 0 ETH 到自己)...' : 'Calling eth_sendTransaction (sending 0 ETH to self)...', 'info')
 
         const txHash = await provider.request({
           method: 'eth_sendTransaction',
           params: [{
-            from: provider.accounts[0],
-            to: provider.accounts[0],
+            from: account,
+            to: account,
             value: '0x0',
           }],
         })
+        logResult(LOCALE === 'zh' ? `交易哈希: ${txHash}` : `Transaction hash: ${txHash}`)
+      } catch (error) {
+        logResult(LOCALE === 'zh' ? `错误: ${error.message}` : `Error: ${error.message}`, 'error')
+      }
+    }
+
+    // Chain names mapping
+    const CHAIN_NAMES = {
+      '0x1': 'Ethereum',
+      '0x89': 'Polygon',
+      '0xa4b1': 'Arbitrum',
+      '0xa': 'Optimism',
+      '0x38': 'BSC',
+      '0xa86a': 'Avalanche',
+      '0x2105': 'Base',
+      '0xaa36a7': 'Sepolia',
+    }
+
+    // Test: switch chain
+    window.testSwitchChain = async function() {
+      try {
+        const targetChainId = selectedChainId
+        const chainName = CHAIN_NAMES[targetChainId] || targetChainId
+
+        // Skip if already on this chain
+        if (provider.chainId === targetChainId) {
+          logResult(LOCALE === 'zh' ? `已在 ${chainName} 链上` : `Already on ${chainName}`, 'info')
+          return
+        }
+
+        logResult(LOCALE === 'zh' ? `调用 wallet_switchEthereumChain: ${chainName}...` : `Calling wallet_switchEthereumChain: ${chainName}...`, 'info')
+
+        await provider.request({
+          method: 'wallet_switchEthereumChain',
+          params: [{ chainId: targetChainId }],
+        })
+        logResult(LOCALE === 'zh' ? `已切换到: ${chainName}` : `Switched to: ${chainName}`)
+      } catch (error) {
+        // Error 4902 means chain not added, try to add it
+        if (error.code === 4902) {
+          logResult(LOCALE === 'zh' ? '钱包中未添加此链，请先在钱包中添加' : 'Chain not added in wallet, please add it first', 'error')
+        } else {
+          logResult(LOCALE === 'zh' ? `错误: ${error.message}` : `Error: ${error.message}`, 'error')
+        }
+      }
+    }
+
+    // Test: request accounts (re-request authorization)
+    window.testRequestAccounts = async function() {
+      try {
+        logResult(LOCALE === 'zh' ? '调用 eth_requestAccounts...' : 'Calling eth_requestAccounts...', 'info')
+        const accounts = await provider.request({ method: 'eth_requestAccounts' })
+        logResult(LOCALE === 'zh' ? `授权账户: ${JSON.stringify(accounts)}` : `Authorized accounts: ${JSON.stringify(accounts)}`)
+      } catch (error) {
+        logResult(LOCALE === 'zh' ? `错误: ${error.message}` : `Error: ${error.message}`, 'error')
+      }
+    }
+
+    // Test: EIP-712 typed data signature
+    window.testSignTypedData = async function() {
+      try {
+        const account = getCurrentAccount()
+        const chainId = parseInt(provider.chainId, 16)
+        const typedData = {
+          types: {
+            EIP712Domain: [
+              { name: 'name', type: 'string' },
+              { name: 'version', type: 'string' },
+              { name: 'chainId', type: 'uint256' },
+              { name: 'verifyingContract', type: 'address' },
+            ],
+            Person: [
+              { name: 'name', type: 'string' },
+              { name: 'wallet', type: 'address' },
+            ],
+            Mail: [
+              { name: 'from', type: 'Person' },
+              { name: 'to', type: 'Person' },
+              { name: 'contents', type: 'string' },
+            ],
+          },
+          primaryType: 'Mail',
+          domain: {
+            name: 'Remote Inject Demo',
+            version: '1',
+            chainId: chainId,
+            verifyingContract: '0xCcCCccccCCCCcCCCCCCcCcCccCcCCCcCcccccccC',
+          },
+          message: {
+            from: {
+              name: 'Alice',
+              wallet: account,
+            },
+            to: {
+              name: 'Bob',
+              wallet: '0xbBbBBBBbbBBBbbbBbbBbbbbBBbBbbbbBbBbbBBbB',
+            },
+            contents: 'Hello, Bob! Time: ' + new Date().toISOString(),
+          },
+        }
+
+        logResult(LOCALE === 'zh' ? '调用 eth_signTypedData_v4 (EIP-712)...' : 'Calling eth_signTypedData_v4 (EIP-712)...', 'info')
+
+        const signature = await provider.request({
+          method: 'eth_signTypedData_v4',
+          params: [account, JSON.stringify(typedData)],
+        })
+        logResult(LOCALE === 'zh' ? `EIP-712 签名: ${signature}` : `EIP-712 Signature: ${signature}`)
+      } catch (error) {
+        logResult(LOCALE === 'zh' ? `错误: ${error.message}` : `Error: ${error.message}`, 'error')
+      }
+    }
+
+    // Test: get block number
+    window.testGetBlockNumber = async function() {
+      try {
+        logResult(LOCALE === 'zh' ? '调用 eth_blockNumber...' : 'Calling eth_blockNumber...', 'info')
+        const blockNumber = await provider.request({ method: 'eth_blockNumber' })
+        logResult(LOCALE === 'zh' ? `区块高度: ${blockNumber} (${parseInt(blockNumber, 16)})` : `Block number: ${blockNumber} (${parseInt(blockNumber, 16)})`)
+      } catch (error) {
+        logResult(LOCALE === 'zh' ? `错误: ${error.message}` : `Error: ${error.message}`, 'error')
+      }
+    }
+
+    // Test: read contract (eth_call) - read USDC decimals on current chain
+    window.testReadContract = async function() {
+      try {
+        // Common USDC contract addresses on different chains
+        const usdcAddresses = {
+          '0x1': '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', // Ethereum
+          '0x89': '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174', // Polygon
+          '0xa4b1': '0xaf88d065e77c8cC2239327C5EDb3A432268e5831', // Arbitrum
+          '0xa': '0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85', // Optimism
+          '0x38': '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d', // BSC
+          '0xa86a': '0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E', // Avalanche
+          '0x2105': '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', // Base
+        }
+
+        const chainId = provider.chainId
+        const usdcAddress = usdcAddresses[chainId]
+
+        if (!usdcAddress) {
+          logResult(LOCALE === 'zh' ? `当前链 (${chainId}) 无预设 USDC 合约地址，使用 ETH name() 调用示例` : `Current chain (${chainId}) has no preset USDC address, using ETH name() call example`, 'info')
+          // Try calling a simple function - name() on WETH (most chains have it)
+          return
+        }
+
+        // decimals() function selector: 0x313ce567
+        const data = '0x313ce567'
+
+        logResult(LOCALE === 'zh' ? `调用 eth_call: USDC decimals() on ${chainId}...` : `Calling eth_call: USDC decimals() on ${chainId}...`, 'info')
+
+        const result = await provider.request({
+          method: 'eth_call',
+          params: [{
+            to: usdcAddress,
+            data: data,
+          }, 'latest'],
+        })
+
+        const decimals = parseInt(result, 16)
+        logResult(LOCALE === 'zh' ? `USDC decimals: ${decimals}` : `USDC decimals: ${decimals}`)
+      } catch (error) {
+        logResult(LOCALE === 'zh' ? `错误: ${error.message}` : `Error: ${error.message}`, 'error')
+      }
+    }
+
+    // Test: estimate gas
+    window.testEstimateGas = async function() {
+      try {
+        const account = getCurrentAccount()
+        logResult(LOCALE === 'zh' ? '调用 eth_estimateGas (估算发送 0 ETH)...' : 'Calling eth_estimateGas (estimate sending 0 ETH)...', 'info')
+
+        const gasEstimate = await provider.request({
+          method: 'eth_estimateGas',
+          params: [{
+            from: account,
+            to: account,
+            value: '0x0',
+          }],
+        })
+
+        const gasNumber = parseInt(gasEstimate, 16)
+        logResult(LOCALE === 'zh' ? `Gas 估算: ${gasEstimate} (${gasNumber})` : `Gas estimate: ${gasEstimate} (${gasNumber})`)
+      } catch (error) {
+        logResult(LOCALE === 'zh' ? `错误: ${error.message}` : `Error: ${error.message}`, 'error')
+      }
+    }
+
+    // ==================== Custom Transfer ====================
+
+    // Test: custom transfer
+    window.testCustomTransfer = async function() {
+      try {
+        const account = getCurrentAccount()
+        const toAddress = document.getElementById('transferTo').value.trim()
+        const amountStr = document.getElementById('transferAmount').value.trim()
+
+        if (!toAddress || !toAddress.match(/^0x[a-fA-F0-9]{40}$/)) {
+          logResult(LOCALE === 'zh' ? '请输入有效的接收地址' : 'Please enter a valid recipient address', 'error')
+          return
+        }
+
+        if (!amountStr || isNaN(parseFloat(amountStr))) {
+          logResult(LOCALE === 'zh' ? '请输入有效的金额' : 'Please enter a valid amount', 'error')
+          return
+        }
+
+        const amountWei = BigInt(Math.floor(parseFloat(amountStr) * 1e18))
+        const valueHex = '0x' + amountWei.toString(16)
+
+        logResult(LOCALE === 'zh' ? `发送 ${amountStr} ETH 到 ${toAddress.slice(0,8)}...` : `Sending ${amountStr} ETH to ${toAddress.slice(0,8)}...`, 'info')
+
+        const txHash = await provider.request({
+          method: 'eth_sendTransaction',
+          params: [{
+            from: account,
+            to: toAddress,
+            value: valueHex,
+          }],
+        })
+        logResult(LOCALE === 'zh' ? `交易哈希: ${txHash}` : `Transaction hash: ${txHash}`)
+      } catch (error) {
+        logResult(LOCALE === 'zh' ? `错误: ${error.message}` : `Error: ${error.message}`, 'error')
+      }
+    }
+
+    // ==================== Custom Contract Call ====================
+
+    // Store parsed ABI methods
+    let parsedAbiMethods = []
+    let selectedMethod = null
+
+    // Parse ABI and populate method selector
+    window.parseContractAbi = function() {
+      const abiText = document.getElementById('contractAbi').value.trim()
+      const container = document.getElementById('abiMethodsContainer')
+      const select = document.getElementById('abiMethodSelect')
+      const paramsContainer = document.getElementById('methodParamsContainer')
+
+      parsedAbiMethods = []
+      selectedMethod = null
+      paramsContainer.innerHTML = ''
+
+      if (!abiText) {
+        container.classList.add('hidden')
+        logResult(LOCALE === 'zh' ? '请输入 ABI' : 'Please enter ABI', 'error')
+        return
+      }
+
+      try {
+        const abi = JSON.parse(abiText)
+
+        if (!Array.isArray(abi)) {
+          throw new Error('ABI must be an array')
+        }
+
+        // Filter for functions only
+        parsedAbiMethods = abi.filter(item =>
+          item.type === 'function' ||
+          (!item.type && item.name && item.inputs) // Some ABIs don't have type
+        )
+
+        if (parsedAbiMethods.length === 0) {
+          throw new Error('No functions found in ABI')
+        }
+
+        // Populate select
+        select.innerHTML = `<option value="">${LOCALE === 'zh' ? '选择方法' : 'Select Method'}</option>`
+        parsedAbiMethods.forEach((method, index) => {
+          const inputTypes = (method.inputs || []).map(i => i.type).join(', ')
+          const option = document.createElement('option')
+          option.value = index
+          option.textContent = `${method.name}(${inputTypes})`
+          select.appendChild(option)
+        })
+
+        container.classList.remove('hidden')
+        logResult(LOCALE === 'zh' ? `解析成功，找到 ${parsedAbiMethods.length} 个方法` : `Parsed successfully, found ${parsedAbiMethods.length} methods`, 'info')
+
+      } catch (error) {
+        container.classList.add('hidden')
+        logResult(LOCALE === 'zh' ? `ABI 解析错误: ${error.message}` : `ABI parse error: ${error.message}`, 'error')
+      }
+    }
+
+    // Handle method selection
+    window.onMethodSelect = function() {
+      const select = document.getElementById('abiMethodSelect')
+      const paramsContainer = document.getElementById('methodParamsContainer')
+      const btnCall = document.getElementById('btnCallContract')
+      const btnSend = document.getElementById('btnSendContract')
+
+      const index = select.value
+      if (index === '' || !parsedAbiMethods[index]) {
+        selectedMethod = null
+        paramsContainer.innerHTML = ''
+        btnCall.disabled = true
+        btnSend.disabled = true
+        return
+      }
+
+      selectedMethod = parsedAbiMethods[index]
+      renderMethodParams(selectedMethod)
+
+      // Enable/disable buttons based on state mutability
+      const isView = selectedMethod.stateMutability === 'view' || selectedMethod.stateMutability === 'pure' || selectedMethod.constant
+      const isPayable = selectedMethod.stateMutability === 'payable'
+
+      btnCall.disabled = !provider?.isConnected
+      btnSend.disabled = !provider?.isConnected || isView
+    }
+
+    // Render parameter inputs for selected method
+    function renderMethodParams(method) {
+      const container = document.getElementById('methodParamsContainer')
+      container.innerHTML = ''
+
+      // Show method info
+      const isView = method.stateMutability === 'view' || method.stateMutability === 'pure' || method.constant
+      const isPayable = method.stateMutability === 'payable'
+      const stateType = isView ? 'view' : (isPayable ? 'payable' : 'nonpayable')
+      const stateLabel = isView ? (LOCALE === 'zh' ? '只读' : 'Read') : (isPayable ? (LOCALE === 'zh' ? '支付' : 'Payable') : (LOCALE === 'zh' ? '写入' : 'Write'))
+
+      const infoDiv = document.createElement('div')
+      infoDiv.className = 'method-info'
+      infoDiv.innerHTML = `<span class="method-type ${stateType}">${stateLabel}</span>${method.name}`
+      container.appendChild(infoDiv)
+
+      // Render inputs
+      const inputs = method.inputs || []
+      if (inputs.length === 0) {
+        const noParams = document.createElement('div')
+        noParams.style.cssText = 'font-size: 12px; color: var(--color-text-muted); margin-bottom: 8px;'
+        noParams.textContent = LOCALE === 'zh' ? '无参数' : 'No parameters'
+        container.appendChild(noParams)
+      } else {
+        inputs.forEach((input, idx) => {
+          const paramDiv = document.createElement('div')
+          paramDiv.className = 'method-param'
+
+          const label = document.createElement('label')
+          label.textContent = input.name || `param${idx}`
+
+          const typeSpan = document.createElement('span')
+          typeSpan.className = 'param-type'
+          typeSpan.textContent = input.type
+
+          const inputEl = document.createElement('input')
+          inputEl.type = 'text'
+          inputEl.className = 'form-input'
+          inputEl.id = `param_${idx}`
+          inputEl.placeholder = getPlaceholder(input.type)
+          inputEl.style.flex = '1'
+
+          paramDiv.appendChild(label)
+          paramDiv.appendChild(typeSpan)
+          paramDiv.appendChild(inputEl)
+          container.appendChild(paramDiv)
+        })
+      }
+
+      // Add value input for payable functions
+      if (isPayable) {
+        const valueDiv = document.createElement('div')
+        valueDiv.className = 'method-param'
+        valueDiv.innerHTML = `
+          <label style="color: var(--color-warning);">value</label>
+          <span class="param-type">ETH</span>
+          <input type="text" class="form-input" id="param_value" placeholder="0.0" style="flex: 1;">
+        `
+        container.appendChild(valueDiv)
+      }
+    }
+
+    // Get placeholder text based on type
+    function getPlaceholder(type) {
+      if (type === 'address') return '0x...'
+      if (type.startsWith('uint') || type.startsWith('int')) return '0'
+      if (type === 'bool') return 'true / false'
+      if (type.startsWith('bytes')) return '0x...'
+      if (type === 'string') return 'text'
+      if (type.includes('[]')) return '[item1, item2, ...]'
+      return ''
+    }
+
+    // Encode function call data
+    function encodeFunctionCall(method) {
+      const inputs = method.inputs || []
+      const params = []
+
+      // Get parameter values
+      for (let i = 0; i < inputs.length; i++) {
+        const input = inputs[i]
+        const value = document.getElementById(`param_${i}`).value.trim()
+        params.push(parseParamValue(value, input.type))
+      }
+
+      // Calculate function selector (first 4 bytes of keccak256)
+      const signature = `${method.name}(${inputs.map(i => i.type).join(',')})`
+      const selector = keccak256(signature).slice(0, 10)
+
+      // Encode parameters
+      const encodedParams = encodeParams(inputs, params)
+
+      return selector + encodedParams
+    }
+
+    // Parse parameter value based on type
+    function parseParamValue(value, type) {
+      if (type === 'bool') {
+        return value.toLowerCase() === 'true' || value === '1'
+      }
+      if (type === 'address') {
+        return value
+      }
+      if (type.startsWith('uint') || type.startsWith('int')) {
+        return BigInt(value)
+      }
+      if (type.includes('[]')) {
+        try {
+          return JSON.parse(value)
+        } catch {
+          return value.split(',').map(v => v.trim())
+        }
+      }
+      return value
+    }
+
+    // Simple keccak256 implementation (first 4 bytes for function selector)
+    function keccak256(str) {
+      // Using Web Crypto API isn't available for keccak256
+      // We'll use a simple implementation for function selector
+      // In production, use ethers.js or web3.js
+
+      // Simple keccak256 hash using a minimal implementation
+      const utf8 = new TextEncoder().encode(str)
+      return keccak256Bytes(utf8)
+    }
+
+    // Minimal Keccak-256 implementation
+    function keccak256Bytes(data) {
+      const KECCAK_ROUNDS = 24
+      const RC = [
+        0x0000000000000001n, 0x0000000000008082n, 0x800000000000808an, 0x8000000080008000n,
+        0x000000000000808bn, 0x0000000080000001n, 0x8000000080008081n, 0x8000000000008009n,
+        0x000000000000008an, 0x0000000000000088n, 0x0000000080008009n, 0x000000008000000an,
+        0x000000008000808bn, 0x800000000000008bn, 0x8000000000008089n, 0x8000000000008003n,
+        0x8000000000008002n, 0x8000000000000080n, 0x000000000000800an, 0x800000008000000an,
+        0x8000000080008081n, 0x8000000000008080n, 0x0000000080000001n, 0x8000000080008008n
+      ]
+
+      const ROTATIONS = [
+        [0, 36, 3, 41, 18], [1, 44, 10, 45, 2], [62, 6, 43, 15, 61],
+        [28, 55, 25, 21, 56], [27, 20, 39, 8, 14]
+      ]
+
+      // Padding
+      const rate = 136 // bytes (1088 bits for keccak256)
+      const padded = new Uint8Array(Math.ceil((data.length + 1) / rate) * rate)
+      padded.set(data)
+      padded[data.length] = 0x01
+      padded[padded.length - 1] |= 0x80
+
+      // State
+      const state = Array(5).fill(null).map(() => Array(5).fill(0n))
+
+      // Absorb
+      for (let i = 0; i < padded.length; i += rate) {
+        for (let j = 0; j < rate && j < 25 * 8; j += 8) {
+          const x = (j / 8) % 5
+          const y = Math.floor((j / 8) / 5)
+          let val = 0n
+          for (let k = 0; k < 8 && i + j + k < padded.length; k++) {
+            val |= BigInt(padded[i + j + k]) << BigInt(k * 8)
+          }
+          state[x][y] ^= val
+        }
+
+        // Permutation
+        for (let round = 0; round < KECCAK_ROUNDS; round++) {
+          // Theta
+          const C = Array(5).fill(0n)
+          const D = Array(5).fill(0n)
+          for (let x = 0; x < 5; x++) {
+            for (let y = 0; y < 5; y++) C[x] ^= state[x][y]
+          }
+          for (let x = 0; x < 5; x++) {
+            D[x] = C[(x + 4) % 5] ^ rotl64(C[(x + 1) % 5], 1n)
+          }
+          for (let x = 0; x < 5; x++) {
+            for (let y = 0; y < 5; y++) state[x][y] ^= D[x]
+          }
+
+          // Rho and Pi
+          const B = Array(5).fill(null).map(() => Array(5).fill(0n))
+          for (let x = 0; x < 5; x++) {
+            for (let y = 0; y < 5; y++) {
+              B[y][(2 * x + 3 * y) % 5] = rotl64(state[x][y], BigInt(ROTATIONS[x][y]))
+            }
+          }
+
+          // Chi
+          for (let x = 0; x < 5; x++) {
+            for (let y = 0; y < 5; y++) {
+              state[x][y] = B[x][y] ^ ((~B[(x + 1) % 5][y]) & B[(x + 2) % 5][y])
+            }
+          }
+
+          // Iota
+          state[0][0] ^= RC[round]
+        }
+      }
+
+      // Squeeze (32 bytes for keccak256)
+      let hash = '0x'
+      for (let i = 0; i < 4; i++) {
+        const x = i % 5
+        const y = Math.floor(i / 5)
+        for (let j = 0; j < 8; j++) {
+          hash += ((state[x][y] >> BigInt(j * 8)) & 0xffn).toString(16).padStart(2, '0')
+        }
+      }
+      return hash
+    }
+
+    function rotl64(x, n) {
+      n = n % 64n
+      return ((x << n) | (x >> (64n - n))) & 0xffffffffffffffffn
+    }
+
+    // Encode ABI parameters (simplified - handles common types)
+    function encodeParams(inputs, values) {
+      let result = ''
+
+      for (let i = 0; i < inputs.length; i++) {
+        const type = inputs[i].type
+        const value = values[i]
+
+        if (type === 'address') {
+          result += value.slice(2).toLowerCase().padStart(64, '0')
+        } else if (type.startsWith('uint') || type.startsWith('int')) {
+          const bn = BigInt(value)
+          const hex = bn.toString(16)
+          result += hex.padStart(64, '0')
+        } else if (type === 'bool') {
+          result += (value ? '1' : '0').padStart(64, '0')
+        } else if (type.startsWith('bytes') && !type.includes('[]')) {
+          // Fixed bytes
+          const hex = value.startsWith('0x') ? value.slice(2) : value
+          result += hex.padEnd(64, '0')
+        } else {
+          // For complex types, just log a warning
+          console.warn(`Type ${type} encoding not fully supported`)
+          result += '0'.repeat(64)
+        }
+      }
+
+      return result
+    }
+
+    // Decode return value (simplified)
+    function decodeReturnValue(data, outputs) {
+      if (!outputs || outputs.length === 0) return data
+
+      const results = []
+      let offset = 2 // skip 0x
+
+      for (const output of outputs) {
+        const chunk = data.slice(offset, offset + 64)
+        offset += 64
+
+        if (output.type === 'address') {
+          results.push('0x' + chunk.slice(24))
+        } else if (output.type.startsWith('uint') || output.type.startsWith('int')) {
+          results.push(BigInt('0x' + chunk).toString())
+        } else if (output.type === 'bool') {
+          results.push(parseInt(chunk, 16) !== 0)
+        } else if (output.type === 'string' || output.type === 'bytes') {
+          results.push('0x' + chunk) // Simplified - dynamic types need more handling
+        } else {
+          results.push('0x' + chunk)
+        }
+      }
+
+      return results.length === 1 ? results[0] : results
+    }
+
+    // Call contract (read)
+    window.testCallContract = async function() {
+      if (!selectedMethod) {
+        logResult(LOCALE === 'zh' ? '请先选择方法' : 'Please select a method first', 'error')
+        return
+      }
+
+      const contractAddress = document.getElementById('contractAddress').value.trim()
+      if (!contractAddress || !contractAddress.match(/^0x[a-fA-F0-9]{40}$/)) {
+        logResult(LOCALE === 'zh' ? '请输入有效的合约地址' : 'Please enter a valid contract address', 'error')
+        return
+      }
+
+      try {
+        const data = encodeFunctionCall(selectedMethod)
+        logResult(LOCALE === 'zh' ? `调用 eth_call: ${selectedMethod.name}...` : `Calling eth_call: ${selectedMethod.name}...`, 'info')
+
+        const result = await provider.request({
+          method: 'eth_call',
+          params: [{
+            to: contractAddress,
+            data: data,
+          }, 'latest'],
+        })
+
+        const decoded = decodeReturnValue(result, selectedMethod.outputs)
+        logResult(LOCALE === 'zh' ? `返回值: ${JSON.stringify(decoded)}` : `Return value: ${JSON.stringify(decoded)}`)
+      } catch (error) {
+        logResult(LOCALE === 'zh' ? `错误: ${error.message}` : `Error: ${error.message}`, 'error')
+      }
+    }
+
+    // Send contract transaction (write)
+    window.testSendContract = async function() {
+      if (!selectedMethod) {
+        logResult(LOCALE === 'zh' ? '请先选择方法' : 'Please select a method first', 'error')
+        return
+      }
+
+      const contractAddress = document.getElementById('contractAddress').value.trim()
+      if (!contractAddress || !contractAddress.match(/^0x[a-fA-F0-9]{40}$/)) {
+        logResult(LOCALE === 'zh' ? '请输入有效的合约地址' : 'Please enter a valid contract address', 'error')
+        return
+      }
+
+      try {
+        const account = getCurrentAccount()
+        const data = encodeFunctionCall(selectedMethod)
+
+        const txParams = {
+          from: account,
+          to: contractAddress,
+          data: data,
+        }
+
+        // Handle payable value
+        const isPayable = selectedMethod.stateMutability === 'payable'
+        if (isPayable) {
+          const valueInput = document.getElementById('param_value')
+          if (valueInput && valueInput.value.trim()) {
+            const valueEth = parseFloat(valueInput.value.trim())
+            const valueWei = BigInt(Math.floor(valueEth * 1e18))
+            txParams.value = '0x' + valueWei.toString(16)
+          }
+        }
+
+        logResult(LOCALE === 'zh' ? `调用 eth_sendTransaction: ${selectedMethod.name}...` : `Calling eth_sendTransaction: ${selectedMethod.name}...`, 'info')
+
+        const txHash = await provider.request({
+          method: 'eth_sendTransaction',
+          params: [txParams],
+        })
+
         logResult(LOCALE === 'zh' ? `交易哈希: ${txHash}` : `Transaction hash: ${txHash}`)
       } catch (error) {
         logResult(LOCALE === 'zh' ? `错误: ${error.message}` : `Error: ${error.message}`, 'error')
