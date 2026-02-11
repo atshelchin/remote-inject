@@ -19,6 +19,7 @@ export interface Session {
   mobile: ServerWebSocket<WebSocketData> | null
   metadata?: DAppMetadata   // DApp 信息
   mobileLocked: boolean     // 移动端是否已锁定（防止被踢）
+  terminated: boolean       // 是否已被用户主动终止（不可再连接）
 }
 
 export interface WebSocketData {
@@ -111,6 +112,7 @@ export function createSession(metadata?: DAppMetadata): Session {
     mobile: null,
     metadata,
     mobileLocked: false,
+    terminated: false,
   }
   sessions.set(session.id, session)
   return session
@@ -150,6 +152,11 @@ export function registerConnection(
   const session = sessions.get(sessionId)
   if (!session) return null
 
+  // 如果session已被终止，拒绝连接
+  if (session.terminated) {
+    return null
+  }
+
   if (role === 'dapp') {
     session.dapp = ws
   } else {
@@ -188,6 +195,30 @@ export function unregisterConnection(
   }
 
   session.status = 'disconnected'
+}
+
+// Session ID 回收延迟（给客户端时间看到 410 状态）
+const SESSION_RECYCLE_DELAY = 5000  // 5 秒后删除，释放 ID
+
+// 终止 Session（用户主动断开，不可再连接）
+export function terminateSession(sessionId: string): void {
+  const session = sessions.get(sessionId)
+  if (!session) return
+
+  session.terminated = true
+  session.status = 'disconnected'
+
+  // 关闭所有连接
+  session.dapp?.close(1008, 'Session terminated')
+  session.mobile?.close(1008, 'Session terminated')
+  session.dapp = null
+  session.mobile = null
+
+  // 延迟删除 session 以回收 ID（4位ID空间有限）
+  setTimeout(() => {
+    sessions.delete(sessionId)
+    console.log(`[Session] Recycled session ID: ${sessionId}`)
+  }, SESSION_RECYCLE_DELAY)
 }
 
 // 获取对端连接

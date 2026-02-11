@@ -300,6 +300,28 @@
       font-size: 13px;
       font-weight: 500;
     }
+
+    .toggle-btn {
+      padding: 6px 14px;
+      border: 1px solid var(--color-border);
+      border-radius: 6px;
+      background: var(--color-bg-secondary);
+      color: var(--color-text-secondary);
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .toggle-btn:hover {
+      border-color: var(--color-accent);
+      color: var(--color-accent);
+    }
+
+    .toggle-btn.active {
+      background: var(--color-accent);
+      border-color: var(--color-accent);
+      color: white;
+    }
   </style>
 </head>
 <body>
@@ -337,10 +359,9 @@
 
       <!-- Config section - shown before connection -->
       <div id="configSection">
-        <!-- DApp config options -->
         <div class="config-section" style="background: var(--color-bg-tertiary); border-radius: var(--radius-md); padding: 16px; margin-bottom: 20px;">
           <div class="config-title" style="font-size: 13px; color: var(--color-text-muted); margin-bottom: 12px; text-transform: uppercase;">
-            <% if (it.locale === 'zh') { %>应用配置<% } else { %>App Config<% } %>
+            <% if (it.locale === 'zh') { %>连接配置<% } else { %>Connection Config<% } %>
           </div>
           <div class="config-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px;">
             <div class="config-item">
@@ -356,25 +377,27 @@
               <input type="text" id="appIcon" placeholder="https://example.com/icon.png" style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid var(--color-border); background: var(--color-bg-secondary); color: var(--color-text-primary); font-size: 14px;">
             </div>
           </div>
-        </div>
-        <!-- Wallet page options (lang/theme passed to landing/bridge URLs) -->
-        <div class="options-row" style="display: flex; gap: 16px; justify-content: center; margin-bottom: 20px; flex-wrap: wrap;">
-          <div class="option-group" style="display: flex; align-items: center; gap: 8px;">
-            <label style="color: var(--color-text-secondary); font-size: 14px;"><% if (it.locale === 'zh') { %>钱包页语言<% } else { %>Wallet page lang<% } %></label>
-            <select id="walletLang" style="padding: 6px 12px; border-radius: 6px; border: 1px solid var(--color-border); background: var(--color-bg-tertiary); color: var(--color-text-primary); font-size: 14px;">
-              <option value=""><% if (it.locale === 'zh') { %>自动<% } else { %>Auto<% } %></option>
-              <% (it.availableLocales || ['en', 'zh']).forEach(loc => { %>
-                <option value="<%= loc %>"><%= localeNames[loc] || loc.toUpperCase() %></option>
-              <% }) %>
-            </select>
-          </div>
-          <div class="option-group" style="display: flex; align-items: center; gap: 8px;">
-            <label style="color: var(--color-text-secondary); font-size: 14px;"><% if (it.locale === 'zh') { %>钱包页主题<% } else { %>Wallet page theme<% } %></label>
-            <select id="walletTheme" style="padding: 6px 12px; border-radius: 6px; border: 1px solid var(--color-border); background: var(--color-bg-tertiary); color: var(--color-text-primary); font-size: 14px;">
-              <option value=""><% if (it.locale === 'zh') { %>自动<% } else { %>Auto<% } %></option>
-              <option value="light"><% if (it.locale === 'zh') { %>浅色<% } else { %>Light<% } %></option>
-              <option value="dark"><% if (it.locale === 'zh') { %>深色<% } else { %>Dark<% } %></option>
-            </select>
+          <!-- Wallet page options as button groups -->
+          <div style="display: flex; flex-wrap: wrap; gap: 24px; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--color-border);">
+            <div class="config-item" style="flex: 1; min-width: 200px;">
+              <label style="display: block; color: var(--color-text-secondary); font-size: 12px; margin-bottom: 8px;"><% if (it.locale === 'zh') { %>钱包页语言<% } else { %>Wallet Language<% } %></label>
+              <div class="toggle-group" id="walletLangGroup" style="display: flex; flex-wrap: wrap; gap: 6px;">
+                <button type="button" class="toggle-btn active" data-value="" onclick="setWalletLang('')"><% if (it.locale === 'zh') { %>自动<% } else { %>Auto<% } %></button>
+                <% (it.availableLocales || ['en', 'zh']).forEach(loc => { %>
+                  <button type="button" class="toggle-btn" data-value="<%= loc %>" onclick="setWalletLang('<%= loc %>')"><%= localeNames[loc] || loc.toUpperCase() %></button>
+                <% }) %>
+              </div>
+              <input type="hidden" id="walletLang" value="">
+            </div>
+            <div class="config-item" style="flex: 1; min-width: 200px;">
+              <label style="display: block; color: var(--color-text-secondary); font-size: 12px; margin-bottom: 8px;"><% if (it.locale === 'zh') { %>钱包页主题<% } else { %>Wallet Theme<% } %></label>
+              <div class="toggle-group" id="walletThemeGroup" style="display: flex; flex-wrap: wrap; gap: 6px;">
+                <button type="button" class="toggle-btn active" data-value="" onclick="setWalletTheme('')"><% if (it.locale === 'zh') { %>自动<% } else { %>Auto<% } %></button>
+                <button type="button" class="toggle-btn" data-value="light" onclick="setWalletTheme('light')"><% if (it.locale === 'zh') { %>浅色<% } else { %>Light<% } %></button>
+                <button type="button" class="toggle-btn" data-value="dark" onclick="setWalletTheme('dark')"><% if (it.locale === 'zh') { %>深色<% } else { %>Dark<% } %></button>
+              </div>
+              <input type="hidden" id="walletTheme" value="">
+            </div>
           </div>
         </div>
       </div>
@@ -471,6 +494,21 @@
       const url = new URL(window.location.href)
       url.searchParams.delete('lang')
       window.location.href = url.toString()
+    }
+
+    // Wallet lang/theme toggle buttons
+    window.setWalletLang = function(value) {
+      document.getElementById('walletLang').value = value
+      document.querySelectorAll('#walletLangGroup .toggle-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.value === value)
+      })
+    }
+
+    window.setWalletTheme = function(value) {
+      document.getElementById('walletTheme').value = value
+      document.querySelectorAll('#walletThemeGroup .toggle-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.value === value)
+      })
     }
 
     // Session storage key
@@ -928,8 +966,9 @@
             document.getElementById('disconnectBtn').classList.add('hidden')
             document.getElementById('connectBtn').disabled = false
             document.getElementById('qrcode').innerHTML = ''
-            document.getElementById('sessionUrl').textContent = LOCALE === 'zh' ? '点击下方按钮开始' : 'Click button below to start'
-            document.getElementById('copyBtn').classList.add('hidden')
+            document.getElementById('sessionUrl').textContent = ''
+            document.getElementById('qrContainer').classList.add('hidden')
+            document.getElementById('configSection').classList.remove('hidden')
           }
         })
 
@@ -1007,8 +1046,9 @@
         provider = null
       }
       document.getElementById('qrcode').innerHTML = ''
-      document.getElementById('sessionUrl').textContent = LOCALE === 'zh' ? '点击下方按钮开始' : 'Click button below to start'
-      document.getElementById('copyBtn').classList.add('hidden')
+      document.getElementById('sessionUrl').textContent = ''
+      document.getElementById('qrContainer').classList.add('hidden')
+      document.getElementById('configSection').classList.remove('hidden')
       updateStatus('disconnected', t('demo.notConnected'))
       document.getElementById('connectBtn').classList.remove('hidden')
       document.getElementById('disconnectBtn').classList.add('hidden')
@@ -1050,8 +1090,9 @@
             document.getElementById('disconnectBtn').classList.add('hidden')
             document.getElementById('connectBtn').disabled = false
             document.getElementById('qrcode').innerHTML = ''
-            document.getElementById('sessionUrl').textContent = LOCALE === 'zh' ? '点击下方按钮开始' : 'Click button below to start'
-            document.getElementById('copyBtn').classList.add('hidden')
+            document.getElementById('sessionUrl').textContent = ''
+            document.getElementById('qrContainer').classList.add('hidden')
+            document.getElementById('configSection').classList.remove('hidden')
           }
         })
 
@@ -1074,8 +1115,11 @@
 
         await provider.resumeSession(sessionData)
 
+        // Show QR area, hide config
         document.getElementById('connectBtn').classList.add('hidden')
         document.getElementById('disconnectBtn').classList.remove('hidden')
+        document.getElementById('configSection').classList.add('hidden')
+        document.getElementById('qrContainer').classList.remove('hidden')
 
         // Show QR code and link
         let finalUrl = sessionData.sessionUrl
@@ -1087,13 +1131,12 @@
         finalUrl = urlObj.toString()
 
         document.getElementById('sessionUrl').textContent = finalUrl
-        document.getElementById('copyBtn').classList.remove('hidden')
         const qrcodeContainer = document.getElementById('qrcode')
         qrcodeContainer.innerHTML = ''
         new QRCode(qrcodeContainer, {
           text: finalUrl,
-          width: 200,
-          height: 200,
+          width: 220,
+          height: 220,
           colorDark: '#1a1a2e',
           colorLight: '#ffffff',
           correctLevel: QRCode.CorrectLevel.M
@@ -1137,7 +1180,7 @@
     // Copy link
     window.copySessionUrl = async function() {
       const url = document.getElementById('sessionUrl').textContent
-      if (!url || url === '点击下方按钮开始' || url === 'Click button below to start') return
+      if (!url) return
 
       try {
         await navigator.clipboard.writeText(url)

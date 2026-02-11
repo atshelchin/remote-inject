@@ -136,6 +136,10 @@ const app = new Elysia()
     if (!session) {
       return new Response('Session not found', { status: 404 })
     }
+    // 已终止的 session 返回 410 Gone
+    if (session.terminated) {
+      return new Response('Session terminated', { status: 410 })
+    }
     return {
       id: session.id,
       status: session.status,
@@ -300,6 +304,9 @@ const app = new Elysia()
       ;(ws.data as any).sessionId = sessionId
       ;(ws.data as any).role = role
 
+      // 检查对端是否已连接（用于DApp重连时通知mobile）
+      const existingPeer = getPeer(sessionId, role)
+
       // 注册连接
       const session = registerConnection(sessionId, role, ws.raw as any)
       if (!session) {
@@ -310,13 +317,20 @@ const app = new Elysia()
       // 发送 ready 消息
       ws.send(JSON.stringify({ type: 'ready' }))
 
+      // 如果DApp重连且mobile已存在，通知mobile重发状态
+      if (role === 'dapp' && existingPeer) {
+        existingPeer.send(JSON.stringify({ type: 'dapp_reconnected' }))
+        console.log(`[WS] Notifying mobile that dapp reconnected to session ${sessionId}`)
+      }
+
       console.log(`[WS] ${role} connected to session ${sessionId}`)
     },
 
-    // 收到消息
+    // 收到消息（透传到对端）
     message(ws, message) {
       const data = ws.data as any
       const { sessionId, role } = data
+      const msgStr = typeof message === 'string' ? message : JSON.stringify(message)
 
       // 获取对端连接
       const peer = getPeer(sessionId, role)
@@ -332,7 +346,6 @@ const app = new Elysia()
       }
 
       // 透传消息到对端
-      const msgStr = typeof message === 'string' ? message : JSON.stringify(message)
       peer.send(msgStr)
 
       console.log(`[WS] ${role} -> ${role === 'dapp' ? 'mobile' : 'dapp'}: ${msgStr.substring(0, 100)}...`)

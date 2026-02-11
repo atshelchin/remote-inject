@@ -700,14 +700,38 @@
 
     // Connect WebSocket
     async function connectWebSocket() {
-      try {
-        const checkRes = await fetch(`/session/${SESSION_ID}`)
-        if (!checkRes.ok) {
-          showError(t('bridge.error'), t('bridge.sessionExpired'))
-          return
+      // Check if session still exists (with retry for network errors)
+      let sessionValid = false
+      let sessionCheckFailed = false
+
+      for (let checkAttempt = 0; checkAttempt < 3; checkAttempt++) {
+        try {
+          const checkRes = await fetch(`/session/${SESSION_ID}`)
+          if (checkRes.ok) {
+            sessionValid = true
+            break
+          } else if (checkRes.status === 404 || checkRes.status === 410) {
+            // 404: Session doesn't exist, 410: Session terminated - no point retrying
+            sessionCheckFailed = true
+            console.log(`[Bridge] Session unavailable (${checkRes.status})`)
+            break
+          }
+          // Other HTTP errors - retry
+          console.log(`[Bridge] Session check failed with status ${checkRes.status}, retrying...`)
+        } catch (e) {
+          // Network error - retry
+          console.log(`[Bridge] Session check network error (attempt ${checkAttempt + 1}/3):`, e.message)
         }
-      } catch (e) {
-        console.error('[Bridge] Failed to check session:', e)
+        if (checkAttempt < 2) {
+          await new Promise(r => setTimeout(r, 500 * (checkAttempt + 1)))
+        }
+      }
+
+      // Show error if session is not available (404 or 410)
+      // For network errors, let WebSocket connection attempt handle it
+      if (sessionCheckFailed) {
+        showError(t('bridge.error'), t('bridge.sessionExpired'))
+        return
       }
 
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
@@ -717,6 +741,7 @@
 
       ws.onopen = () => {
         reconnectAttempts = 0  // Reset on successful connection
+        console.log('[Bridge] WebSocket connected')
       }
 
       ws.onmessage = async (event) => {
@@ -744,6 +769,16 @@
               userInitiatedDisconnect = true  // DApp initiated disconnect
               showError(t('bridge.disconnected'), t('bridge.peerDisconnected'))
               break
+
+            case 'dapp_reconnected':
+              // DApp reconnected (e.g., page refresh), resend current state
+              console.log('[Bridge] DApp reconnected, resending connect message')
+              ws.send(JSON.stringify({
+                type: 'connect',
+                address: currentAddress,
+                chainId: currentChainId,
+              }))
+              break
           }
         } catch (error) {
           console.error('Message handling failed:', error)
@@ -755,15 +790,18 @@
 
         // Don't reconnect if user or peer initiated disconnect
         if (userInitiatedDisconnect) {
-          if (event.code === 1008) {
-            showError(t('bridge.error'), t('bridge.connectionRejected'))
-          } else {
-            showError(t('bridge.disconnected'), t('bridge.reconnect'))
-          }
+          showError(t('bridge.disconnected'), t('bridge.reconnect'))
           return
         }
 
-        // Try to reconnect for network issues
+        // 1008 means session rejected/terminated - don't retry
+        if (event.code === 1008) {
+          console.log('[Bridge] Session rejected (1008), not retrying')
+          showError(t('bridge.error'), t('bridge.sessionExpired'))
+          return
+        }
+
+        // Try to reconnect for network issues (only for non-fatal errors)
         if (reconnectAttempts < maxReconnectAttempts) {
           reconnectAttempts++
           const delay = reconnectDelay * Math.pow(1.5, reconnectAttempts - 1)
@@ -781,11 +819,7 @@
           }, delay)
         } else {
           // Max reconnects reached
-          if (event.code === 1008) {
-            showError(t('bridge.error'), t('bridge.connectionRejected'))
-          } else {
-            showError(t('bridge.disconnected'), t('bridge.reconnect'))
-          }
+          showError(t('bridge.disconnected'), t('bridge.reconnect'))
         }
       }
 
