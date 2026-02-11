@@ -1,0 +1,26 @@
+{
+  "app.name": "Remote Inject",
+  "common.loading": "読み込み中...",
+  "common.error": "エラー",
+  "common.retry": "再試行",
+  "common.copy": "コピー",
+  "common.copied": "コピーしました!",
+  "common.close": "閉じる",
+
+  "landing.title": "ウォレット接続",
+  "landing.connectRequest": "ウォレットへの接続をリクエストしています",
+  "landing.checkingWallet": "ウォレット環境を検出中...",
+  "landing.walletDetected": "{name}を検出しました、リダイレクト中...",
+  "landing.noWallet": "ウォレットが検出されませんでした",
+  "landing.guideTitle": "ウォレットでこのリンクを開いてください",
+  "landing.copyLink": "リンクをコピー",
+
+  "bridge.title": "接続確認",
+  "bridge.connecting": "接続中...",
+  "bridge.connected": "接続済み",
+  "bridge.disconnect": "切断",
+  "bridge.keepOpen": "接続を維持するためにこのページを開いたままにしてください",
+
+  "demo.title": "Remote Inject デモ",
+  "demo.subtitle": "デスクトップでモバイルウォレットに接続"
+}

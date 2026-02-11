@@ -1,0 +1,682 @@
+<!DOCTYPE html>
+<html lang="<%= it.locale %>"<% if (it.theme) { %> data-theme="<%= it.theme %>"<% } %>>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title><%= it.t('bridge.title') %></title>
+  <link rel="stylesheet" href="/css/theme.css">
+  <% if (it.hasCustomTheme) { %><link rel="stylesheet" href="/css/custom-theme.css"><% } %>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--color-accent-gradient);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .container {
+      background: var(--color-bg-secondary);
+      border-radius: var(--radius-xl);
+      padding: 24px 20px;
+      max-width: 340px;
+      width: 100%;
+      text-align: center;
+      box-shadow: var(--shadow-elevated);
+    }
+
+    /* DApp info card - compact horizontal layout */
+    .dapp-info {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--color-border);
+      margin-bottom: 16px;
+    }
+
+    .dapp-icon {
+      width: 44px;
+      height: 44px;
+      border-radius: 10px;
+      background: var(--color-bg-tertiary);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      overflow: hidden;
+      color: var(--color-text-secondary);
+      flex-shrink: 0;
+    }
+
+    .dapp-icon img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .dapp-text {
+      text-align: left;
+      min-width: 0;
+    }
+
+    .dapp-name {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--color-text-primary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .dapp-url {
+      font-size: 12px;
+      color: var(--color-accent);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* Status area - more compact */
+    .status-area {
+      padding: 16px 0;
+      margin-bottom: 16px;
+    }
+
+    .status-icon {
+      width: 56px;
+      height: 56px;
+      margin: 0 auto 12px;
+      position: relative;
+    }
+
+    .status-icon svg {
+      width: 56px;
+      height: 56px;
+    }
+
+    /* Loading animation */
+    .loading-ring {
+      width: 56px;
+      height: 56px;
+      border: 3px solid var(--color-border);
+      border-top-color: var(--color-accent);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* Pulse animation (for pending confirmation) */
+    .pulse-ring {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 56px;
+      height: 56px;
+      border: 2px solid var(--color-warning);
+      border-radius: 50%;
+      animation: pulse 1.5s ease-out infinite;
+    }
+
+    @keyframes pulse {
+      0% { transform: scale(1); opacity: 1; }
+      100% { transform: scale(1.3); opacity: 0; }
+    }
+
+    .status-title {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--color-text-primary);
+      margin-bottom: 4px;
+    }
+
+    .status-desc {
+      font-size: 13px;
+      color: var(--color-text-secondary);
+    }
+
+    /* Request type tag */
+    .request-type {
+      display: inline-block;
+      padding: 4px 12px;
+      background: var(--color-warning-bg);
+      color: var(--color-warning);
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: 500;
+      margin-top: 8px;
+    }
+
+    /* Wallet info - compact */
+    .wallet-info {
+      background: var(--color-bg-tertiary);
+      border-radius: var(--radius-md);
+      padding: 12px;
+      margin-bottom: 16px;
+    }
+
+    .wallet-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 13px;
+    }
+
+    .wallet-row + .wallet-row {
+      margin-top: 6px;
+      padding-top: 6px;
+      border-top: 1px solid var(--color-border);
+    }
+
+    .wallet-label {
+      color: var(--color-text-muted);
+    }
+
+    .wallet-value {
+      color: var(--color-text-primary);
+      font-weight: 500;
+      font-family: monospace;
+      font-size: 12px;
+    }
+
+    /* Buttons */
+    .btn {
+      width: 100%;
+      padding: 12px;
+      border: none;
+      border-radius: var(--radius-md);
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn-disconnect {
+      background: var(--color-error-bg);
+      color: var(--color-error);
+    }
+
+    .btn-disconnect:hover {
+      filter: brightness(0.95);
+    }
+
+    /* Hint text */
+    .hint {
+      margin-top: 12px;
+      font-size: 11px;
+      color: var(--color-text-muted);
+    }
+
+    /* Error state */
+    .error-container {
+      padding: 40px 20px;
+    }
+
+    .error-icon {
+      font-size: 48px;
+      margin-bottom: 16px;
+    }
+
+    .error-title {
+      font-size: 18px;
+      font-weight: 600;
+      color: var(--color-error);
+      margin-bottom: 8px;
+    }
+
+    .error-desc {
+      font-size: 14px;
+      color: var(--color-text-secondary);
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    .brand-footer {
+      position: fixed;
+      bottom: 12px;
+      left: 0;
+      right: 0;
+      text-align: center;
+    }
+
+    .brand-footer a {
+      color: var(--color-text-muted);
+      font-size: 11px;
+      text-decoration: none;
+      opacity: 0.5;
+      transition: opacity 0.2s;
+    }
+
+    .brand-footer a:hover {
+      opacity: 0.8;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Error state -->
+    <div id="errorView" class="error-container hidden">
+      <div class="error-icon"></div>
+      <div class="error-title" id="errorTitle"><%= it.t('bridge.error') %></div>
+      <div class="error-desc" id="errorDesc"><%= it.t('bridge.reconnect') %></div>
+    </div>
+
+    <!-- Main view -->
+    <div id="mainView">
+      <!-- DApp info - compact horizontal -->
+      <div class="dapp-info">
+        <div class="dapp-icon" id="dappIcon"><% if (it.dapp?.icon) { %>
+          <img src="<%= it.dapp.icon %>" alt="" onerror="this.parentElement.textContent='<%= (it.dapp.name || '?')[0].toUpperCase() %>'">
+        <% } else { %><%= (it.dapp?.name || '?')[0].toUpperCase() %><% } %></div>
+        <div class="dapp-text">
+          <div class="dapp-name" id="dappName"><%= it.dapp?.name || it.t('bridge.unknownApp') %></div>
+          <div class="dapp-url" id="dappUrl"><%= it.dapp?.host || '-' %></div>
+        </div>
+      </div>
+
+      <!-- Status area -->
+      <div class="status-area">
+        <div class="status-icon" id="statusIcon">
+          <div class="loading-ring"></div>
+        </div>
+        <div class="status-title" id="statusTitle"><%= it.t('bridge.connecting') %></div>
+        <div class="status-desc" id="statusDesc"><%= it.t('bridge.pleaseWait') %></div>
+        <div class="request-type hidden" id="requestType"></div>
+      </div>
+
+      <!-- Wallet info -->
+      <div class="wallet-info hidden" id="walletInfo">
+        <div class="wallet-row">
+          <span class="wallet-label"><%= it.t('bridge.wallet') %></span>
+          <span class="wallet-value" id="walletName">-</span>
+        </div>
+        <div class="wallet-row">
+          <span class="wallet-label"><%= it.t('bridge.address') %></span>
+          <span class="wallet-value" id="walletAddress">-</span>
+        </div>
+        <div class="wallet-row">
+          <span class="wallet-label"><%= it.t('bridge.network') %></span>
+          <span class="wallet-value" id="walletNetwork">-</span>
+        </div>
+      </div>
+
+      <!-- Disconnect button -->
+      <button class="btn btn-disconnect hidden" id="disconnectBtn" onclick="disconnect()">
+        <%= it.t('bridge.disconnect') %>
+      </button>
+
+      <div class="hint" id="hint"><%= it.t('bridge.keepOpen') %></div>
+    </div>
+  </div>
+
+  <!-- i18n data -->
+  <script type="application/json" id="i18n-data"><%~ it.translationsJson %></script>
+
+  <script>
+    // Server-injected data
+    const SESSION_ID = '<%= it.sessionId %>'
+    const SECRET = '<%= it.secret %>'
+    const LOCALE = '<%= it.locale %>'
+
+    // i18n translations (from server)
+    const I18N = JSON.parse(document.getElementById('i18n-data').textContent)
+
+    // Translate function
+    function t(key, params = {}) {
+      let text = I18N[key] || key
+      Object.entries(params).forEach(([k, v]) => {
+        text = text.replace(new RegExp(`\\{${k}\\}`, 'g'), v)
+      })
+      return text
+    }
+
+    // Chain ID to name mapping
+    const CHAIN_NAMES = {
+      1: 'Ethereum',
+      5: 'Goerli',
+      11155111: 'Sepolia',
+      137: 'Polygon',
+      80001: 'Mumbai',
+      56: 'BNB Chain',
+      97: 'BNB Testnet',
+      42161: 'Arbitrum',
+      10: 'Optimism',
+      43114: 'Avalanche',
+      250: 'Fantom',
+      8453: 'Base',
+    }
+
+    // Security: validate image URL (prevent XSS)
+    function isValidImageUrl(url) {
+      if (!url || typeof url !== 'string') return false
+      if (url.startsWith('data:image/')) return true
+      try {
+        const parsed = new URL(url)
+        return parsed.protocol === 'http:' || parsed.protocol === 'https:'
+      } catch {
+        return false
+      }
+    }
+
+    let ws = null
+    let currentAddress = null
+    let currentChainId = null
+    let pendingRequestCount = 0
+    let selectedProvider = null
+    let providerName = null
+
+    // EIP-6963 wallet discovery
+    const eip6963Providers = []
+
+    window.addEventListener('eip6963:announceProvider', (event) => {
+      const { info, provider } = event.detail
+      if (!eip6963Providers.find(p => p.info.uuid === info.uuid)) {
+        eip6963Providers.push({ info, provider })
+        console.log('[Bridge] EIP-6963 discovered wallet:', info.name)
+      }
+    })
+
+    window.dispatchEvent(new Event('eip6963:requestProvider'))
+
+    // Get wallet name for a provider
+    function getWalletName(provider) {
+      if (!provider) return t('bridge.unknownApp')
+      if (provider.isTokenPocket) return 'TokenPocket'
+      if (provider.isTrust) return 'Trust Wallet'
+      if (provider.isImToken) return 'imToken'
+      if (provider.isMathWallet) return 'Math Wallet'
+      if (provider.isBitKeep || provider.isBitget) return 'Bitget Wallet'
+      if (provider.isOKExWallet || provider.isOkxWallet) return 'OKX Wallet'
+      if (provider.isCoinbaseWallet) return 'Coinbase Wallet'
+      if (provider.isRainbow) return 'Rainbow'
+      if (provider.isMetaMask && !provider.isBraveWallet) return 'MetaMask'
+      if (provider.isBraveWallet) return 'Brave Wallet'
+      if (provider.isPhantom) return 'Phantom'
+      if (provider.isOneInch) return '1inch Wallet'
+      return t('bridge.wallet')
+    }
+
+    // Detect and select provider
+    async function detectProvider() {
+      await new Promise(resolve => setTimeout(resolve, 200))
+
+      let walletSelection = null
+      try {
+        const stored = sessionStorage.getItem('selectedWallet')
+        if (stored) {
+          walletSelection = JSON.parse(stored)
+          sessionStorage.removeItem('selectedWallet')
+        }
+      } catch (e) {
+        console.error('[Bridge] Failed to read wallet selection:', e)
+      }
+
+      if (walletSelection?.source === 'eip6963' && walletSelection.uuid) {
+        const found = eip6963Providers.find(p => p.info.uuid === walletSelection.uuid)
+        if (found) {
+          return { provider: found.provider, name: found.info.name }
+        }
+        if (walletSelection.index < eip6963Providers.length) {
+          const p = eip6963Providers[walletSelection.index]
+          return { provider: p.provider, name: p.info.name }
+        }
+      }
+
+      if (eip6963Providers.length > 0) {
+        const p = eip6963Providers[0]
+        return { provider: p.provider, name: p.info.name }
+      }
+
+      const ethereum = window.ethereum
+      if (!ethereum) {
+        return { provider: null, name: null }
+      }
+
+      if (ethereum.providers && Array.isArray(ethereum.providers) && ethereum.providers.length > 0) {
+        const idx = walletSelection?.index ?? 0
+        if (idx >= 0 && idx < ethereum.providers.length) {
+          const provider = ethereum.providers[idx]
+          return { provider, name: getWalletName(provider) }
+        }
+        return { provider: ethereum.providers[0], name: getWalletName(ethereum.providers[0]) }
+      }
+
+      return { provider: ethereum, name: getWalletName(ethereum) }
+    }
+
+    // Show error
+    function showError(title, desc) {
+      document.getElementById('mainView').classList.add('hidden')
+      document.getElementById('errorView').classList.remove('hidden')
+      document.getElementById('errorTitle').textContent = title
+      document.getElementById('errorDesc').textContent = desc
+    }
+
+    // Update status display
+    function updateStatus(icon, title, desc, showRequest = false) {
+      const iconEl = document.getElementById('statusIcon')
+      document.getElementById('statusTitle').textContent = title
+      document.getElementById('statusDesc').textContent = desc
+
+      if (icon === 'loading') {
+        iconEl.innerHTML = '<div class="loading-ring"></div>'
+      } else if (icon === 'connected') {
+        iconEl.innerHTML = `
+          <svg viewBox="0 0 56 56" fill="none">
+            <circle cx="28" cy="28" r="26" fill="var(--color-success-bg)"/>
+            <path d="M18 28l7 7 13-13" stroke="var(--color-success)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        `
+      } else if (icon === 'pending') {
+        iconEl.innerHTML = `
+          <div class="pulse-ring"></div>
+          <svg viewBox="0 0 56 56" fill="none">
+            <circle cx="28" cy="28" r="26" fill="var(--color-warning-bg)"/>
+            <path d="M28 16v14l9 6" stroke="var(--color-warning)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        `
+      }
+
+      document.getElementById('requestType').classList.toggle('hidden', !showRequest)
+    }
+
+    // Format address
+    function formatAddress(addr) {
+      return addr.slice(0, 6) + '...' + addr.slice(-4)
+    }
+
+    // Get chain name
+    function getChainName(chainId) {
+      return CHAIN_NAMES[chainId] || `Chain ${chainId}`
+    }
+
+    // Disconnect
+    function disconnect() {
+      if (ws) {
+        ws.send(JSON.stringify({ type: 'disconnect', reason: 'User initiated' }))
+        ws.close()
+      }
+      showError(t('bridge.disconnected'), t('bridge.userDisconnected'))
+    }
+
+    // Initialize
+    async function init() {
+      if (!SESSION_ID || !SECRET) {
+        showError(t('bridge.invalidLink'), t('bridge.sessionExpired'))
+        return
+      }
+
+      const detected = await detectProvider()
+      selectedProvider = detected.provider
+      providerName = detected.name
+
+      if (!selectedProvider) {
+        showError(t('bridge.noWallet'), t('bridge.noWallet'))
+        return
+      }
+
+      console.log(`[Bridge] Using wallet: ${providerName}`)
+
+      try {
+        updateStatus('loading', t('bridge.connectingWallet', { name: providerName }), t('bridge.authorizeInPopup'))
+
+        const accounts = await selectedProvider.request({ method: 'eth_requestAccounts' })
+        if (!accounts || accounts.length === 0) {
+          showError(t('bridge.error'), t('bridge.noAccount'))
+          return
+        }
+
+        currentAddress = accounts[0]
+
+        const chainId = await selectedProvider.request({ method: 'eth_chainId' })
+        currentChainId = parseInt(chainId, 16)
+
+        document.getElementById('walletName').textContent = providerName
+        document.getElementById('walletAddress').textContent = formatAddress(currentAddress)
+        document.getElementById('walletNetwork').textContent = getChainName(currentChainId)
+
+        updateStatus('loading', t('bridge.connectingApp'), t('bridge.almostDone'))
+
+        connectWebSocket()
+
+        selectedProvider.on('chainChanged', (chainId) => {
+          currentChainId = parseInt(chainId, 16)
+          document.getElementById('walletNetwork').textContent = getChainName(currentChainId)
+
+          if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'chainChanged', chainId: currentChainId }))
+          }
+        })
+
+        selectedProvider.on('accountsChanged', (accounts) => {
+          if (accounts.length === 0) {
+            disconnect()
+            return
+          }
+          currentAddress = accounts[0]
+          document.getElementById('walletAddress').textContent = formatAddress(currentAddress)
+
+          if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'accountsChanged', accounts }))
+          }
+        })
+
+      } catch (error) {
+        showError(t('bridge.error'), error.message || t('common.retry'))
+      }
+    }
+
+    // Connect WebSocket
+    async function connectWebSocket() {
+      try {
+        const checkRes = await fetch(`/session/${SESSION_ID}`)
+        if (!checkRes.ok) {
+          showError(t('bridge.error'), t('bridge.sessionExpired'))
+          return
+        }
+      } catch (e) {
+        console.error('[Bridge] Failed to check session:', e)
+      }
+
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+      const wsUrl = `${protocol}//${window.location.host}/ws?session=${SESSION_ID}&role=mobile&k=${SECRET}`
+
+      ws = new WebSocket(wsUrl)
+
+      ws.onopen = () => {}
+
+      ws.onmessage = async (event) => {
+        try {
+          const message = JSON.parse(event.data)
+
+          switch (message.type) {
+            case 'ready':
+              ws.send(JSON.stringify({
+                type: 'connect',
+                address: currentAddress,
+                chainId: currentChainId,
+              }))
+
+              updateStatus('connected', t('bridge.connected'), t('bridge.waitingRequest'))
+              document.getElementById('walletInfo').classList.remove('hidden')
+              document.getElementById('disconnectBtn').classList.remove('hidden')
+              break
+
+            case 'request':
+              await handleRequest(message)
+              break
+
+            case 'disconnect':
+              showError(t('bridge.disconnected'), t('bridge.peerDisconnected'))
+              break
+          }
+        } catch (error) {
+          console.error('Message handling failed:', error)
+        }
+      }
+
+      ws.onclose = (event) => {
+        if (document.getElementById('mainView').classList.contains('hidden')) return
+
+        if (event.code === 1008) {
+          showError(t('bridge.error'), t('bridge.connectionRejected'))
+        } else {
+          showError(t('bridge.disconnected'), t('bridge.reconnect'))
+        }
+      }
+
+      ws.onerror = () => {
+        showError(t('bridge.error'), t('bridge.connectionFailed'))
+      }
+    }
+
+    // Handle RPC request
+    async function handleRequest(message) {
+      const { id, method, params } = message
+
+      const methodName = I18N['method.' + method] || method
+      updateStatus('pending', t('bridge.confirmInWallet'), t('bridge.requestingAction'), true)
+      document.getElementById('requestType').textContent = methodName
+      pendingRequestCount++
+
+      try {
+        const result = await selectedProvider.request({ method, params })
+        ws.send(JSON.stringify({ type: 'response', id, result }))
+      } catch (error) {
+        ws.send(JSON.stringify({
+          type: 'response',
+          id,
+          error: { code: error.code || -32603, message: error.message || 'Unknown error' },
+        }))
+      }
+
+      pendingRequestCount--
+
+      if (pendingRequestCount === 0) {
+        updateStatus('connected', t('bridge.connected'), t('bridge.waitingRequest'))
+      }
+    }
+
+    // Start
+    init()
+  </script>
+
+  <div class="brand-footer">
+    <a href="https://github.com/atshelchin" target="_blank" rel="noopener">Powered by Remote Inject</a>
+  </div>
+</body>
+</html>

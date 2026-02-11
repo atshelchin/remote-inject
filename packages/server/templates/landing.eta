@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="<%= it.locale %>"<% if (it.theme) { %> data-theme="<%= it.theme %>"<% } %>>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title><%= it.t('app.name') %> - <%= it.t('landing.title') %></title>
+  <link rel="stylesheet" href="/css/theme.css">
+  <% if (it.hasCustomTheme) { %><link rel="stylesheet" href="/css/custom-theme.css"><% } %>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--color-accent-gradient);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .container {
+      background: var(--color-bg-secondary);
+      border-radius: var(--radius-xl);
+      padding: 24px;
+      max-width: 360px;
+      width: 100%;
+      text-align: center;
+      box-shadow: var(--shadow-elevated);
+    }
+
+    /* DApp info - horizontal layout */
+    .dapp-info {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--color-border);
+      margin-bottom: 16px;
+    }
+
+    .dapp-icon {
+      width: 48px;
+      height: 48px;
+      border-radius: var(--radius-md);
+      background: var(--color-bg-tertiary);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      overflow: hidden;
+      color: var(--color-text-secondary);
+      flex-shrink: 0;
+    }
+
+    .dapp-icon img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .dapp-text {
+      text-align: left;
+      min-width: 0;
+    }
+
+    .dapp-name {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--color-text-primary);
+      margin-bottom: 2px;
+    }
+
+    .dapp-url {
+      font-size: 13px;
+      color: var(--color-accent);
+    }
+
+    .connect-label {
+      font-size: 13px;
+      color: var(--color-text-muted);
+      margin-bottom: 12px;
+    }
+
+    .status {
+      padding: 12px 16px;
+      border-radius: var(--radius-md);
+      margin-bottom: 16px;
+    }
+
+    .status.checking {
+      background: var(--color-warning-bg);
+      color: var(--color-warning);
+    }
+
+    .status.success {
+      background: var(--color-success-bg);
+      color: var(--color-success);
+    }
+
+    .status.error {
+      background: var(--color-error-bg);
+      color: var(--color-error);
+    }
+
+    .spinner {
+      display: inline-block;
+      width: 20px;
+      height: 20px;
+      border: 2px solid var(--color-accent);
+      border-radius: 50%;
+      border-top-color: transparent;
+      animation: spin 1s linear infinite;
+      margin-right: 8px;
+      vertical-align: middle;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .guide {
+      background: var(--color-bg-tertiary);
+      border-radius: var(--radius-md);
+      padding: 16px;
+      text-align: left;
+    }
+
+    .guide h3 {
+      font-size: 14px;
+      color: var(--color-text-primary);
+      margin-bottom: 12px;
+    }
+
+    .guide ol {
+      padding-left: 18px;
+      color: var(--color-text-secondary);
+      font-size: 13px;
+      line-height: 1.7;
+    }
+
+    .guide li {
+      margin-bottom: 4px;
+    }
+
+    .copy-btn {
+      margin-top: 12px;
+      padding: 10px 16px;
+      background: var(--color-accent);
+      color: white;
+      border: none;
+      border-radius: var(--radius-sm);
+      font-size: 14px;
+      cursor: pointer;
+      transition: background 0.2s;
+      width: 100%;
+    }
+
+    .copy-btn:hover {
+      background: var(--color-accent-hover);
+    }
+
+    .copy-btn:active {
+      transform: scale(0.98);
+    }
+
+    /* Wallet selector */
+    .wallet-selector {
+      margin-bottom: 16px;
+    }
+
+    .wallet-selector h3 {
+      font-size: 13px;
+      color: var(--color-text-secondary);
+      margin-bottom: 10px;
+    }
+
+    .wallet-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .wallet-btn {
+      display: flex;
+      align-items: center;
+      padding: 10px 12px;
+      background: var(--color-bg-tertiary);
+      border: 2px solid transparent;
+      border-radius: var(--radius-md);
+      cursor: pointer;
+      transition: all 0.2s;
+      text-align: left;
+    }
+
+    .wallet-btn:hover {
+      background: var(--color-bg-primary);
+      border-color: var(--color-accent);
+    }
+
+    .wallet-btn:active {
+      transform: scale(0.98);
+    }
+
+    .wallet-btn-icon {
+      width: 28px;
+      height: 28px;
+      border-radius: var(--radius-sm);
+      background: var(--color-accent-gradient);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-size: 12px;
+      font-weight: bold;
+      margin-right: 10px;
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+
+    .wallet-btn-icon img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+
+    .wallet-btn-name {
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--color-text-primary);
+    }
+
+    .wallet-btn-desc {
+      font-size: 11px;
+      color: var(--color-text-muted);
+      margin-top: 1px;
+    }
+
+    .brand-footer {
+      position: fixed;
+      bottom: 12px;
+      left: 0;
+      right: 0;
+      text-align: center;
+    }
+
+    .brand-footer a {
+      color: var(--color-text-muted);
+      font-size: 11px;
+      text-decoration: none;
+      opacity: 0.5;
+      transition: opacity 0.2s;
+    }
+
+    .brand-footer a:hover {
+      opacity: 0.8;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- DApp info - horizontal layout -->
+    <div class="dapp-info">
+      <div class="dapp-icon" id="dappIcon"><% if (it.dapp?.icon) { %>
+        <img src="<%= it.dapp.icon %>" alt="" onerror="this.parentElement.textContent='<%= (it.dapp.name || '?')[0].toUpperCase() %>'">
+      <% } else { %><%= (it.dapp?.name || '?')[0].toUpperCase() %><% } %></div>
+      <div class="dapp-text">
+        <div class="dapp-name" id="dappName"><%= it.dapp?.name || it.t('landing.connectRequest') %></div>
+        <div class="dapp-url" id="dappUrl"><%= it.dapp?.host || '' %></div>
+      </div>
+    </div>
+
+    <div class="status checking" id="status">
+      <span class="spinner"></span>
+      <%= it.t('landing.checkingWallet') %>
+    </div>
+
+    <!-- Wallet selector (shown when multiple wallets detected) -->
+    <div class="wallet-selector" id="walletSelector" style="display: none;">
+      <h3><%= it.t('landing.selectWallet') %></h3>
+      <div class="wallet-list" id="walletList"></div>
+    </div>
+
+    <div class="guide" id="guide" style="display: none;">
+      <h3><%= it.t('landing.guideTitle') %></h3>
+      <ol>
+        <li><%= it.t('landing.guideStep1') %></li>
+        <li><%= it.t('landing.guideStep2') %></li>
+        <li><%= it.t('landing.guideStep3') %></li>
+      </ol>
+      <button class="copy-btn" onclick="copyLink()"><%= it.t('landing.copyLink') %></button>
+    </div>
+  </div>
+
+  <!-- i18n data -->
+  <script type="application/json" id="i18n-data"><%~ it.translationsJson %></script>
+
+  <script>
+    // Server-injected data
+    const SESSION_ID = '<%= it.sessionId %>'
+    const SECRET = '<%= it.secret %>'
+    const LOCALE = '<%= it.locale %>'
+    const THEME = '<%= it.theme || '' %>'
+
+    // Build bridge URL with lang/theme params
+    function getBridgeUrl() {
+      let url = `/bridge?session=${SESSION_ID}&k=${SECRET}`
+      if (LOCALE) url += `&lang=${LOCALE}`
+      if (THEME) url += `&theme=${THEME}`
+      return url
+    }
+
+    // i18n translations (from server)
+    const I18N = JSON.parse(document.getElementById('i18n-data').textContent)
+
+    // Translate function
+    function t(key, params = {}) {
+      let text = I18N[key] || key
+      Object.entries(params).forEach(([k, v]) => {
+        text = text.replace(new RegExp(`\\{${k}\\}`, 'g'), v)
+      })
+      return text
+    }
+
+    // Security: validate image URL (prevent XSS)
+    function isValidImageUrl(url) {
+      if (!url || typeof url !== 'string') return false
+      if (url.startsWith('data:image/')) return true
+      try {
+        const parsed = new URL(url)
+        return parsed.protocol === 'http:' || parsed.protocol === 'https:'
+      } catch {
+        return false
+      }
+    }
+
+    // EIP-6963 wallet discovery
+    const eip6963Providers = []
+
+    window.addEventListener('eip6963:announceProvider', (event) => {
+      const { info, provider } = event.detail
+      if (!eip6963Providers.find(p => p.info.uuid === info.uuid)) {
+        eip6963Providers.push({ info, provider })
+        console.log('[Landing] EIP-6963 discovered wallet:', info.name)
+      }
+    })
+
+    window.dispatchEvent(new Event('eip6963:requestProvider'))
+
+    // Get wallet name for a provider (fallback for non-EIP-6963 wallets)
+    function getWalletName(provider) {
+      if (!provider) return t('bridge.unknownApp')
+      if (provider.isTokenPocket) return 'TokenPocket'
+      if (provider.isTrust) return 'Trust Wallet'
+      if (provider.isImToken) return 'imToken'
+      if (provider.isMathWallet) return 'Math Wallet'
+      if (provider.isBitKeep || provider.isBitget) return 'Bitget Wallet'
+      if (provider.isOKExWallet || provider.isOkxWallet) return 'OKX Wallet'
+      if (provider.isCoinbaseWallet) return 'Coinbase Wallet'
+      if (provider.isRainbow) return 'Rainbow'
+      if (provider.isMetaMask && !provider.isBraveWallet) return 'MetaMask'
+      if (provider.isBraveWallet) return 'Brave Wallet'
+      if (provider.isPhantom) return 'Phantom'
+      if (provider.isOneInch) return '1inch Wallet'
+      return t('bridge.wallet')
+    }
+
+    // Detect all available providers (EIP-6963 + legacy)
+    function detectAllProviders() {
+      const result = []
+
+      // 1. Prefer EIP-6963 discovered wallets
+      eip6963Providers.forEach(({ info, provider }, index) => {
+        result.push({
+          provider,
+          uuid: info.uuid,
+          name: info.name,
+          icon: info.icon,
+          index,
+          source: 'eip6963'
+        })
+      })
+
+      if (result.length > 0) {
+        return result
+      }
+
+      // 2. Fallback to window.ethereum.providers array
+      const ethereum = window.ethereum
+      if (!ethereum) return []
+
+      if (ethereum.providers && Array.isArray(ethereum.providers) && ethereum.providers.length > 0) {
+        return ethereum.providers.map((provider, index) => ({
+          provider,
+          index,
+          name: getWalletName(provider),
+          source: 'providers'
+        }))
+      }
+
+      // 3. Single provider
+      return [{
+        provider: ethereum,
+        index: 0,
+        name: getWalletName(ethereum),
+        source: 'ethereum'
+      }]
+    }
+
+    // Select wallet and redirect
+    function selectWallet(walletData) {
+      document.getElementById('walletSelector').style.display = 'none'
+      document.getElementById('status').className = 'status success'
+      document.getElementById('status').textContent = t('landing.redirecting')
+
+      sessionStorage.setItem('selectedWallet', JSON.stringify({
+        index: walletData.index,
+        uuid: walletData.uuid,
+        source: walletData.source
+      }))
+
+      setTimeout(() => {
+        window.location.href = getBridgeUrl()
+      }, 300)
+    }
+
+    // Render wallet selector list (safe: using DOM API)
+    function renderWalletSelector(providers) {
+      const listEl = document.getElementById('walletList')
+      listEl.innerHTML = ''
+
+      providers.forEach((wallet) => {
+        const btn = document.createElement('button')
+        btn.className = 'wallet-btn'
+        btn.onclick = () => selectWallet(wallet)
+
+        const iconDiv = document.createElement('div')
+        iconDiv.className = 'wallet-btn-icon'
+
+        if (wallet.icon && isValidImageUrl(wallet.icon)) {
+          const img = document.createElement('img')
+          img.src = wallet.icon
+          img.alt = ''
+          img.onerror = () => {
+            iconDiv.textContent = (wallet.name || '?')[0].toUpperCase()
+          }
+          iconDiv.appendChild(img)
+        } else {
+          iconDiv.textContent = (wallet.name || '?')[0].toUpperCase()
+        }
+
+        const textDiv = document.createElement('div')
+        const nameDiv = document.createElement('div')
+        nameDiv.className = 'wallet-btn-name'
+        nameDiv.textContent = wallet.name || t('bridge.unknownApp')
+        const descDiv = document.createElement('div')
+        descDiv.className = 'wallet-btn-desc'
+        descDiv.textContent = t('landing.useWallet')
+        textDiv.appendChild(nameDiv)
+        textDiv.appendChild(descDiv)
+
+        btn.appendChild(iconDiv)
+        btn.appendChild(textDiv)
+        listEl.appendChild(btn)
+      })
+
+      document.getElementById('walletSelector').style.display = 'block'
+      document.getElementById('status').className = 'status checking'
+      document.getElementById('status').innerHTML = '<span class="spinner"></span>' + t('landing.selectWallet')
+    }
+
+    // Initialize wallet detection
+    async function initWalletDetection() {
+      await new Promise(resolve => setTimeout(resolve, 200))
+
+      const providers = detectAllProviders()
+      console.log('[Landing] Detected wallets:', providers.length, providers.map(p => p.name))
+
+      if (providers.length > 1) {
+        renderWalletSelector(providers)
+      } else if (providers.length === 1) {
+        const wallet = providers[0]
+        sessionStorage.setItem('selectedWallet', JSON.stringify({
+          index: wallet.index,
+          uuid: wallet.uuid,
+          source: wallet.source
+        }))
+
+        document.getElementById('status').className = 'status success'
+        document.getElementById('status').textContent = t('landing.walletDetected', { name: wallet.name })
+
+        setTimeout(() => {
+          window.location.href = getBridgeUrl()
+        }, 500)
+      } else {
+        document.getElementById('status').className = 'status error'
+        document.getElementById('status').textContent = t('landing.noWallet')
+      }
+    }
+
+    // Initialize
+    if (!SESSION_ID) {
+      document.getElementById('status').className = 'status error'
+      document.getElementById('status').textContent = t('landing.invalidSession')
+    } else {
+      if (typeof window.ethereum !== 'undefined' || eip6963Providers.length > 0) {
+        if (!SECRET) {
+          document.getElementById('status').className = 'status error'
+          document.getElementById('status').textContent = t('landing.invalidLink')
+        } else {
+          initWalletDetection()
+        }
+      } else {
+        document.getElementById('status').className = 'status error'
+        document.getElementById('status').textContent = t('landing.noWalletEnv')
+        document.getElementById('guide').style.display = 'block'
+      }
+    }
+
+    function copyLink() {
+      const link = window.location.href
+      navigator.clipboard.writeText(link).then(() => {
+        const btn = document.querySelector('.copy-btn')
+        btn.textContent = t('common.copied')
+        setTimeout(() => {
+          btn.textContent = t('landing.copyLink')
+        }, 2000)
+      })
+    }
+  </script>
+
+  <div class="brand-footer">
+    <a href="https://github.com/atshelchin" target="_blank" rel="noopener">Powered by Remote Inject</a>
+  </div>
+</body>
+</html>

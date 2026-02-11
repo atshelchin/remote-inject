@@ -29,6 +29,10 @@ yarn-error.log*
 .env.development.local
 .env.test.local
 .env.production.local
+.env
+
+# user config (keep config-example, ignore user's config)
+packages/server/config/
 
 # vercel
 .vercel
@@ -40,3 +44,5 @@ yarn-error.log*
 **/*.log
 package-lock.json
 **/*.bun
+.turbo
+node_modules

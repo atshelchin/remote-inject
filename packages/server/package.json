@@ -1,0 +1,22 @@
+{
+  "name": "@shelchin/remote-inject-server",
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "bun run --watch src/index.ts",
+    "build": "bun build src/index.ts --outdir dist --target bun",
+    "embed": "bun run scripts/embed-assets.ts",
+    "build:exe": "bun run embed && bun build src/index.ts --compile --outfile dist/remote-inject --minify",
+    "build:exe:linux": "bun run embed && bun build src/index.ts --compile --outfile dist/remote-inject-linux --target=bun-linux-x64 --minify",
+    "build:exe:win": "bun run embed && bun build src/index.ts --compile --outfile dist/remote-inject.exe --target=bun-windows-x64 --minify",
+    "start": "bun run dist/index.js",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@elysiajs/static": "^1.2.0",
+    "elysia": "^1.2.0",
+    "eta": "^4.5.1"
+  },
+  "devDependencies": {
+    "bun-types": "latest"
+  }
+}

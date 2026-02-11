@@ -1,0 +1,35 @@
+/**
+ * Custom Theme Example
+ * Override CSS variables to customize the look and feel
+ *
+ * Copy this file to config/themes/custom.css
+ * Set CONFIG_DIR environment variable to point to your config directory
+ */
+
+:root {
+  /* Brand colors - change these to match your brand */
+  --color-accent: #6366f1;           /* Primary brand color */
+  --color-accent-hover: #818cf8;     /* Hover state */
+  --color-accent-active: #4f46e5;    /* Active/pressed state */
+
+  /* Gradient for headers (optional) */
+  --color-accent-gradient: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+
+  /* Success/Error colors (optional) */
+  /* --color-success: #22c55e; */
+  /* --color-error: #ef4444; */
+}
+
+/* Dark theme overrides (optional) */
+[data-theme="dark"] {
+  --color-accent: #818cf8;
+  --color-accent-hover: #a5b4fc;
+  --color-accent-active: #6366f1;
+}
+
+/* Custom logo or branding (optional) */
+/*
+.app-logo {
+  background-image: url('https://your-domain.com/logo.png');
+}
+*/

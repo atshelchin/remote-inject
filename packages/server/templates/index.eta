@@ -1,0 +1,715 @@
+<!DOCTYPE html>
+<html lang="<%= it.locale %>"<% if (it.theme) { %> data-theme="<%= it.theme %>"<% } %>>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Remote Inject</title>
+  <link rel="stylesheet" href="/css/theme.css">
+  <% if (it.hasCustomTheme) { %><link rel="stylesheet" href="/css/custom-theme.css"><% } %>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--color-bg-primary);
+      color: var(--color-text-primary);
+      min-height: 100vh;
+      line-height: 1.6;
+    }
+
+    /* Top controls */
+    .top-controls {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      z-index: 100;
+      display: flex;
+      gap: 8px;
+    }
+
+    .ctrl-btn {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      border: 1px solid var(--color-border);
+      background: var(--color-bg-secondary);
+      color: var(--color-text-secondary);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s;
+    }
+
+    .ctrl-btn:hover {
+      border-color: var(--color-accent);
+      color: var(--color-accent);
+    }
+
+    select.ctrl-btn.lang {
+      width: auto;
+      padding: 0 12px;
+      border-radius: 18px;
+      font-size: 12px;
+      font-weight: 500;
+      appearance: none;
+      -webkit-appearance: none;
+      padding-right: 24px;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 8px center;
+    }
+
+    select.ctrl-btn.lang option {
+      background: var(--color-bg-secondary);
+      color: var(--color-text-primary);
+    }
+
+    /* Hero */
+    .hero {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 60px 24px;
+      position: relative;
+    }
+
+    .hero::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 600px;
+      height: 600px;
+      background: radial-gradient(circle, var(--color-accent-muted) 0%, transparent 70%);
+      opacity: 0.5;
+      pointer-events: none;
+    }
+
+    .hero-badge {
+      display: inline-block;
+      padding: 6px 14px;
+      background: var(--color-accent-muted);
+      color: var(--color-accent);
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 500;
+      margin-bottom: 24px;
+      letter-spacing: 0.5px;
+    }
+
+    .hero h1 {
+      font-size: clamp(48px, 10vw, 72px);
+      font-weight: 700;
+      letter-spacing: -2px;
+      margin-bottom: 20px;
+      background: var(--color-accent-gradient);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .hero-desc {
+      font-size: 18px;
+      color: var(--color-text-secondary);
+      max-width: 480px;
+      margin: 0 auto 40px;
+      line-height: 1.7;
+    }
+
+    .hero-actions {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 500;
+      text-decoration: none;
+      transition: all 0.2s;
+      cursor: pointer;
+      border: none;
+    }
+
+    .btn-primary {
+      background: var(--color-accent);
+      color: white;
+    }
+
+    .btn-primary:hover {
+      background: var(--color-accent-hover);
+      transform: translateY(-1px);
+    }
+
+    .btn-ghost {
+      background: transparent;
+      color: var(--color-text-secondary);
+      border: 1px solid var(--color-border);
+    }
+
+    .btn-ghost:hover {
+      border-color: var(--color-text-secondary);
+      color: var(--color-text-primary);
+    }
+
+    .btn svg {
+      width: 16px;
+      height: 16px;
+    }
+
+    /* Scroll hint */
+    .scroll-hint {
+      position: absolute;
+      bottom: 40px;
+      left: 50%;
+      transform: translateX(-50%);
+      color: var(--color-text-muted);
+      font-size: 12px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      animation: bounce 2s infinite;
+    }
+
+    @keyframes bounce {
+      0%, 100% { transform: translateX(-50%) translateY(0); }
+      50% { transform: translateX(-50%) translateY(6px); }
+    }
+
+    /* Sections */
+    .section {
+      padding: 80px 24px;
+      max-width: 900px;
+      margin: 0 auto;
+    }
+
+    .section-title {
+      font-size: 28px;
+      font-weight: 600;
+      text-align: center;
+      margin-bottom: 48px;
+      letter-spacing: -0.5px;
+    }
+
+    /* Features - card grid */
+    .features {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 16px;
+    }
+
+    .feature {
+      padding: 24px;
+      background: var(--color-bg-secondary);
+      border: 1px solid var(--color-border);
+      border-radius: 12px;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    .feature:hover {
+      border-color: var(--color-accent);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    }
+
+    .feature-icon {
+      width: 44px;
+      height: 44px;
+      background: var(--color-accent-muted);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--color-accent);
+      margin-bottom: 16px;
+    }
+
+    .feature h3 {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+
+    .feature p {
+      font-size: 14px;
+      color: var(--color-text-secondary);
+      line-height: 1.6;
+    }
+
+    /* Flow diagram */
+    .flow {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      flex-wrap: wrap;
+      padding: 40px 0;
+    }
+
+    .flow-box {
+      padding: 16px 24px;
+      background: var(--color-bg-secondary);
+      border: 1px solid var(--color-border);
+      border-radius: 10px;
+      text-align: center;
+      min-width: 120px;
+    }
+
+    .flow-box.highlight {
+      border-color: var(--color-accent);
+      background: var(--color-accent-muted);
+    }
+
+    .flow-box h4 {
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 2px;
+    }
+
+    .flow-box p {
+      font-size: 11px;
+      color: var(--color-text-muted);
+    }
+
+    .flow-arrow {
+      color: var(--color-text-muted);
+      font-size: 18px;
+    }
+
+    .flow-desc {
+      text-align: center;
+      font-size: 14px;
+      color: var(--color-text-secondary);
+      max-width: 600px;
+      margin: 0 auto;
+    }
+
+    /* Code block */
+    .code-block {
+      background: var(--color-bg-secondary);
+      border: 1px solid var(--color-border);
+      border-radius: 10px;
+      overflow: hidden;
+    }
+
+    .code-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 16px;
+      background: var(--color-bg-tertiary);
+      border-bottom: 1px solid var(--color-border);
+    }
+
+    .code-header span {
+      font-size: 12px;
+      color: var(--color-text-muted);
+      font-weight: 500;
+    }
+
+    .code-copy {
+      padding: 4px 10px;
+      font-size: 11px;
+      background: transparent;
+      border: 1px solid var(--color-border);
+      border-radius: 4px;
+      color: var(--color-text-secondary);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .code-copy:hover {
+      background: var(--color-accent);
+      border-color: var(--color-accent);
+      color: white;
+    }
+
+    pre {
+      padding: 20px;
+      overflow-x: auto;
+      font-family: 'SF Mono', Monaco, Consolas, monospace;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    code .c { color: var(--color-text-muted); }
+    code .k { color: #a855f7; }
+    code .s { color: #22c55e; }
+    code .f { color: #3b82f6; }
+
+    /* Install command */
+    .install-cmd {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      padding: 16px 24px;
+      background: var(--color-bg-secondary);
+      border: 1px solid var(--color-border);
+      border-radius: 8px;
+      max-width: 400px;
+      margin: 0 auto 40px;
+    }
+
+    .install-cmd code {
+      font-family: 'SF Mono', Monaco, Consolas, monospace;
+      font-size: 14px;
+      color: var(--color-text-primary);
+    }
+
+    .install-cmd button {
+      padding: 6px 12px;
+      font-size: 12px;
+      background: var(--color-accent);
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    .install-cmd button:hover {
+      background: var(--color-accent-hover);
+    }
+
+    /* Footer */
+    .footer {
+      text-align: center;
+      padding: 40px 24px;
+      border-top: 1px solid var(--color-border);
+      font-size: 13px;
+      color: var(--color-text-muted);
+    }
+
+    .footer a {
+      color: var(--color-accent);
+      text-decoration: none;
+    }
+
+    .footer a:hover {
+      text-decoration: underline;
+    }
+
+    /* Config section */
+    .config-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 24px;
+    }
+
+    .config-card {
+      background: var(--color-bg-secondary);
+      border: 1px solid var(--color-border);
+      border-radius: 12px;
+      padding: 24px;
+    }
+
+    .config-card h3 {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .config-card h3 svg {
+      color: var(--color-accent);
+    }
+
+    .config-card p {
+      font-size: 13px;
+      color: var(--color-text-secondary);
+      margin-bottom: 16px;
+      line-height: 1.6;
+    }
+
+    .config-card pre {
+      background: var(--color-bg-tertiary);
+      border-radius: 8px;
+      padding: 12px;
+      font-size: 12px;
+      overflow-x: auto;
+    }
+
+    .config-card code {
+      font-family: 'SF Mono', Monaco, Consolas, monospace;
+    }
+
+    .config-tree {
+      font-family: 'SF Mono', Monaco, Consolas, monospace;
+      font-size: 12px;
+      color: var(--color-text-secondary);
+      line-height: 1.8;
+    }
+
+    .config-tree .dir { color: var(--color-accent); }
+    .config-tree .file { color: var(--color-text-primary); }
+    .config-tree .comment { color: var(--color-text-muted); font-style: italic; }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .features { grid-template-columns: 1fr; }
+      .config-grid { grid-template-columns: 1fr; }
+      .hero { padding: 40px 20px; }
+      .hero h1 { font-size: 36px; letter-spacing: -1px; }
+      .hero-desc { font-size: 16px; }
+      .section { padding: 60px 20px; }
+      .section-title { font-size: 24px; margin-bottom: 32px; }
+    }
+
+    @media (max-width: 640px) {
+      .flow { flex-direction: column; }
+      .flow-arrow { transform: rotate(90deg); }
+      .top-controls { top: 12px; right: 12px; }
+      .ctrl-btn { width: 32px; height: 32px; }
+      select.ctrl-btn.lang { padding: 0 8px; padding-right: 20px; font-size: 11px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="top-controls">
+    <select class="ctrl-btn lang" id="langSelect" onchange="changeLang(this.value)">
+      <% const localeNames = { en: 'EN', zh: '中文', ja: '日本語', ko: '한국어', es: 'ES', fr: 'FR', de: 'DE' } %>
+      <% (it.availableLocales || ['en', 'zh']).forEach(loc => { %>
+        <option value="<%= loc %>" <%= it.locale === loc ? 'selected' : '' %>><%= localeNames[loc] || loc.toUpperCase() %></option>
+      <% }) %>
+    </select>
+    <button class="ctrl-btn" onclick="toggleTheme()" id="themeBtn">
+      <svg id="themeIcon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"></svg>
+    </button>
+  </div>
+
+  <!-- Hero -->
+  <section class="hero">
+    <span class="hero-badge">Open Source WalletConnect Alternative</span>
+    <h1>Remote Inject</h1>
+    <p class="hero-desc">
+      <% if (it.locale === 'zh') { %>
+        用移动钱包为桌面 DApp 签名。扫码即连，无需下载。
+      <% } else { %>
+        Sign for desktop DApps with your mobile wallet. Scan to connect, no download needed.
+      <% } %>
+    </p>
+    <div class="hero-actions">
+      <a href="/demo" class="btn btn-primary">
+        <% if (it.locale === 'zh') { %>试用 Demo<% } else { %>Try Demo<% } %>
+      </a>
+      <a href="https://github.com/atshelchin/remote-inject" class="btn btn-ghost" target="_blank">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+        GitHub
+      </a>
+    </div>
+    <div class="scroll-hint">
+      <span><% if (it.locale === 'zh') { %>向下滚动<% } else { %>Scroll<% } %></span>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M19 12l-7 7-7-7"/></svg>
+    </div>
+  </section>
+
+  <!-- Features -->
+  <section class="section">
+    <h2 class="section-title"><% if (it.locale === 'zh') { %>为什么选择 Remote Inject<% } else { %>Why Remote Inject<% } %></h2>
+    <div class="features">
+      <div class="feature">
+        <div class="feature-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
+        </div>
+        <h3><% if (it.locale === 'zh') { %>开源自托管<% } else { %>Open Source<% } %></h3>
+        <p><% if (it.locale === 'zh') { %>完全开源，可自行部署。数据完全掌控。<% } else { %>Fully open source. Deploy on your own server.<% } %></p>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="7" height="12" x="2" y="6" rx="1"/><rect width="7" height="9" x="15" y="4" rx="1"/><path d="M9 9h6M9 13h6"/></svg>
+        </div>
+        <h3><% if (it.locale === 'zh') { %>跨设备签名<% } else { %>Cross-Device<% } %></h3>
+        <p><% if (it.locale === 'zh') { %>桌面发起，手机确认。私钥不离开手机。<% } else { %>Initiate on desktop, confirm on mobile.<% } %></p>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m18 16 4-4-4-4"/><path d="m6 8-4 4 4 4"/><path d="m14.5 4-5 16"/></svg>
+        </div>
+        <h3><% if (it.locale === 'zh') { %>简单集成<% } else { %>Easy Integration<% } %></h3>
+        <p><% if (it.locale === 'zh') { %>标准 EIP-1193，兼容主流 Web3 库。<% } else { %>Standard EIP-1193, works with any Web3 library.<% } %></p>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+        </div>
+        <h3><% if (it.locale === 'zh') { %>可定制<% } else { %>Customizable<% } %></h3>
+        <p><% if (it.locale === 'zh') { %>自定义多语言和主题，无需改代码。<% } else { %>Custom i18n and themes without code changes.<% } %></p>
+      </div>
+    </div>
+  </section>
+
+  <!-- How it works -->
+  <section class="section">
+    <h2 class="section-title"><% if (it.locale === 'zh') { %>工作原理<% } else { %>How It Works<% } %></h2>
+    <div class="flow">
+      <div class="flow-box">
+        <h4><% if (it.locale === 'zh') { %>桌面 DApp<% } else { %>Desktop DApp<% } %></h4>
+        <p>SDK Provider</p>
+      </div>
+      <span class="flow-arrow">→</span>
+      <div class="flow-box highlight">
+        <h4>Relay Server</h4>
+        <p>WebSocket</p>
+      </div>
+      <span class="flow-arrow">→</span>
+      <div class="flow-box">
+        <h4><% if (it.locale === 'zh') { %>移动钱包<% } else { %>Mobile Wallet<% } %></h4>
+        <p>Bridge Page</p>
+      </div>
+    </div>
+    <p class="flow-desc">
+      <% if (it.locale === 'zh') { %>
+        SDK 通过 Relay 服务器将请求转发到移动端 Bridge 页面，由钱包中的真实 Provider 处理并返回结果。
+      <% } else { %>
+        SDK forwards requests via Relay server to mobile Bridge page, where your real wallet provider handles them.
+      <% } %>
+    </p>
+  </section>
+
+  <!-- Quick Start -->
+  <section class="section">
+    <h2 class="section-title"><% if (it.locale === 'zh') { %>快速开始<% } else { %>Quick Start<% } %></h2>
+
+    <div class="install-cmd">
+      <code>npm i @shelchin/remote-inject-sdk</code>
+      <button onclick="copyInstall(this)">Copy</button>
+    </div>
+
+    <div class="code-block">
+      <div class="code-header">
+        <span>JavaScript</span>
+        <button class="code-copy" onclick="copyCode(this)">Copy</button>
+      </div>
+      <pre><code><span class="k">import</span> { RemoteProvider } <span class="k">from</span> <span class="s">'@shelchin/remote-inject-sdk'</span>
+
+<span class="c">// Create and connect</span>
+<span class="k">const</span> provider = <span class="k">new</span> <span class="f">RemoteProvider</span>()
+<span class="k">const</span> { url } = <span class="k">await</span> provider.<span class="f">connect</span>(<span class="s">'https://your-server.com'</span>)
+
+<span class="c">// Show QR code for mobile to scan</span>
+showQRCode(url)
+
+<span class="c">// Use like any EIP-1193 provider</span>
+<span class="k">const</span> accounts = <span class="k">await</span> provider.<span class="f">request</span>({ method: <span class="s">'eth_requestAccounts'</span> })</code></pre>
+    </div>
+  </section>
+
+  <!-- Self-hosting -->
+  <section class="section">
+    <h2 class="section-title"><% if (it.locale === 'zh') { %>自托管部署<% } else { %>Self-Hosting<% } %></h2>
+    <div class="code-block">
+      <div class="code-header">
+        <span>Terminal</span>
+        <button class="code-copy" onclick="copyCode(this)">Copy</button>
+      </div>
+      <pre><code><span class="c"># Clone and install</span>
+git clone https://github.com/atshelchin/remote-inject
+cd remote-inject && bun install
+
+<span class="c"># Run server</span>
+bun run --filter @shelchin/remote-inject-server start
+
+<span class="c"># Or build single executable</span>
+bun run --filter @shelchin/remote-inject-server build</code></pre>
+    </div>
+  </section>
+
+  <!-- Customization -->
+  <section class="section">
+    <h2 class="section-title"><% if (it.locale === 'zh') { %>定制配置<% } else { %>Customization<% } %></h2>
+    <div class="config-grid">
+      <div class="config-card">
+        <h3>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+          <% if (it.locale === 'zh') { %>多语言 (i18n)<% } else { %>Internationalization<% } %>
+        </h3>
+        <p><% if (it.locale === 'zh') { %>在配置目录添加翻译文件即可新增语言。<% } else { %>Add translation files to config directory for new languages.<% } %></p>
+        <pre class="config-tree"><span class="dir">~/.remote-inject/</span>
+└── <span class="dir">locales/</span>
+    ├── <span class="file">en.json</span>  <span class="comment"># override English</span>
+    └── <span class="file">pt.json</span>  <span class="comment"># add Portuguese</span></pre>
+      </div>
+      <div class="config-card">
+        <h3>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="13.5" cy="6.5" r="0.5" fill="currentColor"/><circle cx="17.5" cy="10.5" r="0.5" fill="currentColor"/><circle cx="8.5" cy="7.5" r="0.5" fill="currentColor"/><circle cx="6.5" cy="12.5" r="0.5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.555C21.965 6.012 17.461 2 12 2z"/></svg>
+          <% if (it.locale === 'zh') { %>自定义主题<% } else { %>Custom Themes<% } %>
+        </h3>
+        <p><% if (it.locale === 'zh') { %>添加 CSS 文件覆盖默认样式变量。<% } else { %>Add CSS file to override default style variables.<% } %></p>
+        <pre class="config-tree"><span class="dir">~/.remote-inject/</span>
+└── <span class="dir">themes/</span>
+    └── <span class="file">custom.css</span></pre>
+        <pre><code><span class="c">/* custom.css */</span>
+:root {
+  --color-accent: #e11d48;
+}</code></pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <p>
+      <% if (it.locale === 'zh') { %>
+        由 <a href="https://github.com/atshelchin" target="_blank">@atshelchin</a> 构建
+      <% } else { %>
+        Built by <a href="https://github.com/atshelchin" target="_blank">@atshelchin</a>
+      <% } %>
+    </p>
+  </footer>
+
+  <script src="/js/common.js"></script>
+  <script>
+    function toggleTheme() {
+      ThemeManager.toggle()
+      updateThemeIcon()
+    }
+
+    function updateThemeIcon() {
+      const icon = document.getElementById('themeIcon')
+      if (ThemeManager.current === 'dark') {
+        icon.innerHTML = '<circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>'
+      } else {
+        icon.innerHTML = '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>'
+      }
+    }
+    updateThemeIcon()
+
+    function changeLang(newLang) {
+      document.cookie = `locale=${newLang};path=/;max-age=31536000;SameSite=Lax`
+      localStorage.setItem('locale', newLang)
+      const url = new URL(window.location.href)
+      url.searchParams.delete('lang')
+      window.location.href = url.toString()
+    }
+
+    function copyInstall(btn) {
+      navigator.clipboard.writeText('npm i @shelchin/remote-inject-sdk').then(() => {
+        btn.textContent = '<%= it.locale === "zh" ? "已复制" : "Copied" %>'
+        setTimeout(() => btn.textContent = 'Copy', 1500)
+      })
+    }
+
+    function copyCode(btn) {
+      const code = btn.closest('.code-block').querySelector('code').textContent
+      navigator.clipboard.writeText(code).then(() => {
+        btn.textContent = '<%= it.locale === "zh" ? "已复制" : "Copied" %>'
+        setTimeout(() => btn.textContent = 'Copy', 1500)
+      })
+    }
+  </script>
+</body>
+</html>

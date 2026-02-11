@@ -1,0 +1,26 @@
+{
+  "app.name": "ko Remote Inject",
+  "common.loading": "ko 読み込み中...",
+  "common.error": "ko ko エラー",
+  "common.retry": "ko 再試行",
+  "common.copy": "ko コピー",
+  "common.copied": "ko コピーしました！",
+  "common.close": "ko 閉じる",
+
+  "landing.title": "ko ウォレット接続",
+  "landing.connectRequest": "ko ウォレットへの接続をリクエストしています",
+  "landing.checkingWallet": "ko ウォレット環境を検出中...",
+  "landing.walletDetected": "ko {name}を検出しました、リダイレクト中...",
+  "landing.noWallet": "ko ウォレットが検出されませんでした",
+  "landing.guideTitle": "ko ウォレットでこのリンクを開いてください",
+  "landing.guideStep1": "ko 暗号ウォレットアプリを開く",
+  "landing.guideStep2": "ko DApp ブラウザに移動",
+  "landing.guideStep3": "ko 下のリンクを貼り付けてアクセス",
+  "landing.copyLink": "ko リンクをコピー",
+ "bridge.wallet": "KO 钱包",
+  "bridge.title": "ko 接続確認",
+  "bridge.connecting": "ko 接続中...",
+  "bridge.connected": "ko 接続済み",
+  "bridge.disconnect": "ko 切断",
+  "bridge.keepOpen": "ko 接続を維持するためにこのページを開いたままにしてください"
+}
