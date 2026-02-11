@@ -1,68 +1,27 @@
 <!DOCTYPE html>
 <html lang="<%= it.locale %>"<% if (it.theme) { %> data-theme="<%= it.theme %>"<% } %>>
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <%~ include('partials/head', it) %>
   <title>Remote Inject</title>
-  <link rel="stylesheet" href="/css/theme.css">
-  <% if (it.hasCustomTheme) { %><link rel="stylesheet" href="/css/custom-theme.css"><% } %>
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-
+    /* Index page specific styles */
     body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: var(--color-bg-primary);
-      color: var(--color-text-primary);
       min-height: 100vh;
-      line-height: 1.6;
     }
 
-    /* Top controls */
     .top-controls {
-      position: fixed;
       top: 20px;
       right: 20px;
       z-index: 100;
-      display: flex;
-      gap: 8px;
     }
 
     .ctrl-btn {
       width: 36px;
       height: 36px;
-      border-radius: 50%;
-      border: 1px solid var(--color-border);
-      background: var(--color-bg-secondary);
-      color: var(--color-text-secondary);
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      transition: all 0.2s;
-    }
-
-    .ctrl-btn:hover {
-      border-color: var(--color-accent);
-      color: var(--color-accent);
     }
 
     select.ctrl-btn.lang {
-      width: auto;
-      padding: 0 12px;
       border-radius: 18px;
-      font-size: 12px;
-      font-weight: 500;
-      appearance: none;
-      -webkit-appearance: none;
-      padding-right: 24px;
-      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
-      background-repeat: no-repeat;
-      background-position: right 8px center;
-    }
-
-    select.ctrl-btn.lang option {
-      background: var(--color-bg-secondary);
-      color: var(--color-text-primary);
     }
 
     /* Hero */
@@ -128,39 +87,8 @@
       justify-content: center;
     }
 
-    .btn {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      padding: 12px 24px;
-      border-radius: 8px;
-      font-size: 14px;
-      font-weight: 500;
-      text-decoration: none;
-      transition: all 0.2s;
-      cursor: pointer;
-      border: none;
-    }
-
-    .btn-primary {
-      background: var(--color-accent);
-      color: white;
-    }
-
     .btn-primary:hover {
-      background: var(--color-accent-hover);
       transform: translateY(-1px);
-    }
-
-    .btn-ghost {
-      background: transparent;
-      color: var(--color-text-secondary);
-      border: 1px solid var(--color-border);
-    }
-
-    .btn-ghost:hover {
-      border-color: var(--color-text-secondary);
-      color: var(--color-text-primary);
     }
 
     .btn svg {
@@ -295,58 +223,10 @@
       margin: 0 auto;
     }
 
-    /* Code block */
+    /* Code block - using base.css styles with overrides */
     .code-block {
-      background: var(--color-bg-secondary);
-      border: 1px solid var(--color-border);
       border-radius: 10px;
-      overflow: hidden;
     }
-
-    .code-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 10px 16px;
-      background: var(--color-bg-tertiary);
-      border-bottom: 1px solid var(--color-border);
-    }
-
-    .code-header span {
-      font-size: 12px;
-      color: var(--color-text-muted);
-      font-weight: 500;
-    }
-
-    .code-copy {
-      padding: 4px 10px;
-      font-size: 11px;
-      background: transparent;
-      border: 1px solid var(--color-border);
-      border-radius: 4px;
-      color: var(--color-text-secondary);
-      cursor: pointer;
-      transition: all 0.15s;
-    }
-
-    .code-copy:hover {
-      background: var(--color-accent);
-      border-color: var(--color-accent);
-      color: white;
-    }
-
-    pre {
-      padding: 20px;
-      overflow-x: auto;
-      font-family: 'SF Mono', Monaco, Consolas, monospace;
-      font-size: 13px;
-      line-height: 1.6;
-    }
-
-    code .c { color: var(--color-text-muted); }
-    code .k { color: #a855f7; }
-    code .s { color: #22c55e; }
-    code .f { color: #3b82f6; }
 
     /* Install command */
     .install-cmd {

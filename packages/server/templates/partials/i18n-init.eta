@@ -1,0 +1,13 @@
+<script>
+window.LOCALE = '<%= it.locale %>';
+window.TRANSLATIONS = <%~ it.translationsJson %>;
+function t(key, params) {
+  var text = window.TRANSLATIONS[key] || key;
+  if (params) {
+    Object.keys(params).forEach(function(k) {
+      text = text.replace(new RegExp('\\{' + k + '\\}', 'g'), params[k]);
+    });
+  }
+  return text;
+}
+</script>

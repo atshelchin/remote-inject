@@ -1,0 +1,22 @@
+<script>
+(function() {
+  var themeToggle = document.getElementById('theme-toggle');
+  var themeIcon = document.getElementById('theme-icon');
+
+  function updateIcon() {
+    var theme = document.documentElement.getAttribute('data-theme');
+    themeIcon.textContent = theme === 'dark' ? '☀️' : '🌙';
+  }
+
+  updateIcon();
+
+  themeToggle.addEventListener('click', function() {
+    var current = document.documentElement.getAttribute('data-theme');
+    var next = current === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', next);
+    localStorage.setItem('theme', next);
+    document.cookie = 'theme=' + next + ';path=/;max-age=31536000';
+    updateIcon();
+  });
+})();
+</script>

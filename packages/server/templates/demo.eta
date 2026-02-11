@@ -1,21 +1,11 @@
 <!DOCTYPE html>
 <html lang="<%= it.locale %>"<% if (it.theme) { %> data-theme="<%= it.theme %>"<% } %>>
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <%~ include('partials/head', it) %>
   <title><%= it.t('demo.title') %></title>
-  <link rel="stylesheet" href="/css/theme.css">
-  <% if (it.hasCustomTheme) { %><link rel="stylesheet" href="/css/custom-theme.css"><% } %>
   <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
-
+    /* Demo page specific styles */
     body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: var(--color-bg-primary);
       min-height: 100vh;
       padding: 40px 20px;
     }
@@ -23,7 +13,7 @@
     .container {
       max-width: 800px;
       margin: 0 auto;
-      padding:14px;
+      padding: 14px;
     }
 
     h1 {
@@ -39,19 +29,7 @@
     }
 
     .card {
-      background: var(--color-bg-secondary);
-      border-radius: var(--radius-lg);
-      padding: 24px;
       margin-bottom: 24px;
-      box-shadow: var(--shadow-card);
-    }
-
-    .card h2 {
-      font-size: 18px;
-      color: var(--color-text-primary);
-      margin-bottom: 16px;
-      padding-bottom: 12px;
-      border-bottom: 1px solid var(--color-border);
     }
 
     .qr-container {
@@ -144,44 +122,20 @@
 
     .status-badge.connecting .status-dot {
       background: var(--color-warning);
-      animation: pulse 1s infinite;
+      animation: status-pulse 1s infinite;
     }
 
     .status-badge.connected .status-dot {
       background: var(--color-success);
     }
 
-    @keyframes pulse {
+    @keyframes status-pulse {
       0%, 100% { opacity: 1; }
       50% { opacity: 0.5; }
     }
 
-    .info-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-      gap: 16px;
-      margin-top: 16px;
-    }
-
     .info-item {
-      background: var(--color-bg-tertiary);
-      padding: 16px;
-      border-radius: var(--radius-md);
-      margin-bottom:12px;
-    }
-
-    .info-label {
-      font-size: 12px;
-      color: var(--color-text-muted);
-      text-transform: uppercase;
-      margin-bottom: 4px;
-    }
-
-    .info-value {
-      font-family: monospace;
-      font-size: 14px;
-      color: var(--color-text-primary);
-      word-break: break-all;
+      margin-bottom: 12px;
     }
 
     .btn-group {
@@ -189,48 +143,6 @@
       flex-wrap: wrap;
       gap: 12px;
       margin-top: 16px;
-    }
-
-    .btn {
-      padding: 12px 24px;
-      border: none;
-      border-radius: var(--radius-sm);
-      font-size: 14px;
-      font-weight: 500;
-      cursor: pointer;
-      transition: all 0.2s;
-    }
-
-    .btn:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-    }
-
-    .btn-primary {
-      background: var(--color-accent);
-      color: white;
-    }
-
-    .btn-primary:hover:not(:disabled) {
-      background: var(--color-accent-hover);
-    }
-
-    .btn-secondary {
-      background: var(--color-bg-tertiary);
-      color: var(--color-text-primary);
-    }
-
-    .btn-secondary:hover:not(:disabled) {
-      filter: brightness(0.95);
-    }
-
-    .btn-danger {
-      background: var(--color-error);
-      color: white;
-    }
-
-    .btn-danger:hover:not(:disabled) {
-      filter: brightness(0.9);
     }
 
     .result-box {
@@ -256,10 +168,6 @@
 
     .result-box .info {
       color: #60a5fa;
-    }
-
-    .hidden {
-      display: none !important;
     }
 
     /* Fixed buttons */

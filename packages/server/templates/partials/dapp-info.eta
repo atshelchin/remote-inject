@@ -1,0 +1,15 @@
+<% if (it.dapp) { %>
+<div class="dapp-info">
+  <div class="dapp-icon">
+    <% if (it.dapp.icon) { %>
+    <img src="<%= it.dapp.icon %>" alt="" onerror="this.style.display='none';this.parentNode.textContent='🔗'">
+    <% } else { %>
+    🔗
+    <% } %>
+  </div>
+  <div class="dapp-text">
+    <div class="dapp-name"><%= it.dapp.name || it.t('bridge.unknownApp') %></div>
+    <div class="dapp-url"><%= it.dapp.host %></div>
+  </div>
+</div>
+<% } %>

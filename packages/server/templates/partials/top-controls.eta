@@ -1,0 +1,12 @@
+<div class="top-controls">
+  <button class="ctrl-btn" id="theme-toggle" title="Toggle theme">
+    <span id="theme-icon">🌙</span>
+  </button>
+  <% if (it.availableLocales && it.availableLocales.length > 1) { %>
+  <select class="ctrl-btn lang" id="lang-select">
+    <% it.availableLocales.forEach(function(loc) { %>
+    <option value="<%= loc %>" <%= loc === it.locale ? 'selected' : '' %>><%= loc.toUpperCase() %></option>
+    <% }) %>
+  </select>
+  <% } %>
+</div>
