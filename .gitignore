@@ -46,3 +46,4 @@ package-lock.json
 **/*.bun
 .turbo
 node_modules
+test-results
