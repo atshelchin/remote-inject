@@ -401,6 +401,106 @@
       text-decoration: underline;
     }
 
+    /* Safe App Mode */
+    .safe-app-container {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      text-align: center;
+    }
+
+    .safe-app-logo {
+      width: 80px;
+      height: 80px;
+      margin-bottom: 24px;
+    }
+
+    .safe-app-title {
+      font-size: 24px;
+      font-weight: 600;
+      margin-bottom: 12px;
+    }
+
+    .safe-app-desc {
+      font-size: 14px;
+      color: var(--color-text-secondary);
+      margin-bottom: 32px;
+      max-width: 400px;
+    }
+
+    .safe-app-input-group {
+      width: 100%;
+      max-width: 500px;
+      margin-bottom: 16px;
+    }
+
+    .safe-app-input {
+      width: 100%;
+      padding: 14px 16px;
+      font-size: 14px;
+      border: 1px solid var(--color-border);
+      border-radius: 10px;
+      background: var(--color-bg-secondary);
+      color: var(--color-text-primary);
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .safe-app-input:focus {
+      border-color: var(--color-accent);
+    }
+
+    .safe-app-input::placeholder {
+      color: var(--color-text-muted);
+    }
+
+    .safe-app-btn {
+      width: 100%;
+      max-width: 500px;
+      padding: 14px 24px;
+      font-size: 15px;
+      font-weight: 500;
+      background: var(--color-accent);
+      color: white;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .safe-app-btn:hover {
+      background: var(--color-accent-hover);
+    }
+
+    .safe-app-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .safe-app-error {
+      color: #ef4444;
+      font-size: 13px;
+      margin-top: 12px;
+    }
+
+    .safe-app-hint {
+      font-size: 12px;
+      color: var(--color-text-muted);
+      margin-top: 24px;
+      max-width: 400px;
+    }
+
+    .safe-app-hint code {
+      background: var(--color-bg-tertiary);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-family: 'SF Mono', Monaco, Consolas, monospace;
+      font-size: 11px;
+    }
+
     /* Config section */
     .config-grid {
       display: grid;
@@ -479,6 +579,40 @@
   </style>
 </head>
 <body>
+  <!-- Safe App Mode Container (hidden by default, shown when in Safe iframe) -->
+  <div id="safeAppContainer" class="safe-app-container" style="display: none;">
+    <img src="/logo.svg" alt="Remote Inject" class="safe-app-logo">
+    <h1 class="safe-app-title">Remote Inject</h1>
+    <p class="safe-app-desc">
+      <% if (it.locale === 'zh') { %>
+        粘贴 DApp 生成的连接链接，开始使用 Safe 钱包签名
+      <% } else { %>
+        Paste the connection link from DApp to sign with Safe wallet
+      <% } %>
+    </p>
+    <div class="safe-app-input-group">
+      <input
+        type="text"
+        id="sessionUrlInput"
+        class="safe-app-input"
+        placeholder="<% if (it.locale === 'zh') { %>粘贴链接，如：https://xxx/s/ABCD?k=...<% } else { %>Paste link, e.g.: https://xxx/s/ABCD?k=...<% } %>"
+      >
+    </div>
+    <button id="connectBtn" class="safe-app-btn" onclick="handleConnect()">
+      <% if (it.locale === 'zh') { %>连接<% } else { %>Connect<% } %>
+    </button>
+    <div id="safeAppError" class="safe-app-error" style="display: none;"></div>
+    <p class="safe-app-hint">
+      <% if (it.locale === 'zh') { %>
+        提示：链接格式为 <code>/s/会话ID?k=密钥</code>，从 DApp 的二维码获取
+      <% } else { %>
+        Hint: Link format is <code>/s/sessionId?k=secret</code>, get it from DApp's QR code
+      <% } %>
+    </p>
+  </div>
+
+  <!-- Normal page content (hidden when in Safe App mode) -->
+  <div id="normalContent">
   <div class="top-controls">
     <select class="ctrl-btn lang" id="langSelect" onchange="changeLang(this.value)">
       <% const localeNames = { en: 'EN', zh: '中文', ja: '日本語', ko: '한국어', es: 'ES', fr: 'FR', de: 'DE' } %>
@@ -670,9 +804,106 @@ bun run --filter @shelchin/remote-inject-server build</code></pre>
       <% } %>
     </p>
   </footer>
+  </div><!-- End normalContent -->
 
   <script src="/js/common.js"></script>
   <script>
+    // Safe App Detection and Handling
+    const LOCALE = '<%= it.locale %>'
+
+    function isSafeApp() {
+      try {
+        // Safe Apps run in iframe
+        if (window.parent !== window && window.self !== window.top) {
+          return true
+        }
+      } catch (e) {
+        // Cross-origin iframe access error - likely Safe or similar
+        return true
+      }
+      return false
+    }
+
+    function parseSessionUrl(urlStr) {
+      try {
+        // Handle both full URLs and relative paths
+        let url
+        if (urlStr.startsWith('http://') || urlStr.startsWith('https://')) {
+          url = new URL(urlStr)
+        } else if (urlStr.startsWith('/')) {
+          url = new URL(urlStr, window.location.origin)
+        } else {
+          // Try to parse as full URL anyway
+          url = new URL(urlStr)
+        }
+
+        // Check for /s/:id format
+        const pathMatch = url.pathname.match(/\/s\/([A-Za-z0-9]+)/)
+        if (pathMatch) {
+          const sessionId = pathMatch[1]
+          const secret = url.searchParams.get('k')
+          if (sessionId && secret) {
+            return { sessionId, secret }
+          }
+        }
+
+        // Check for /landing or /bridge format
+        const sessionId = url.searchParams.get('session')
+        const secret = url.searchParams.get('k')
+        if (sessionId && secret) {
+          return { sessionId, secret }
+        }
+
+        return null
+      } catch (e) {
+        return null
+      }
+    }
+
+    function showError(message) {
+      const errorEl = document.getElementById('safeAppError')
+      errorEl.textContent = message
+      errorEl.style.display = 'block'
+    }
+
+    function hideError() {
+      document.getElementById('safeAppError').style.display = 'none'
+    }
+
+    function handleConnect() {
+      hideError()
+      const input = document.getElementById('sessionUrlInput')
+      const urlStr = input.value.trim()
+
+      if (!urlStr) {
+        showError(LOCALE === 'zh' ? '请输入连接链接' : 'Please enter a connection link')
+        return
+      }
+
+      const parsed = parseSessionUrl(urlStr)
+      if (!parsed) {
+        showError(LOCALE === 'zh' ? '无效的链接格式' : 'Invalid link format')
+        return
+      }
+
+      // Redirect to bridge page
+      const bridgeUrl = `/bridge?session=${encodeURIComponent(parsed.sessionId)}&k=${encodeURIComponent(parsed.secret)}`
+      window.location.href = bridgeUrl
+    }
+
+    // Check if in Safe App mode on page load
+    if (isSafeApp()) {
+      document.getElementById('safeAppContainer').style.display = 'flex'
+      document.getElementById('normalContent').style.display = 'none'
+
+      // Allow Enter key to submit
+      document.getElementById('sessionUrlInput').addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+          handleConnect()
+        }
+      })
+    }
+
     function toggleTheme() {
       ThemeManager.toggle()
       updateThemeIcon()

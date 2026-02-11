@@ -392,9 +392,71 @@
 
     window.dispatchEvent(new Event('eip6963:requestProvider'))
 
+    // Check if running in Safe App iframe
+    function isSafeAppEnvironment() {
+      try {
+        // Safe Apps always run in an iframe
+        if (window.parent === window || window.self === window.top) {
+          return false
+        }
+        // Additional check: Safe sets specific properties
+        return true
+      } catch (e) {
+        // Cross-origin iframe access error - likely Safe or similar
+        return true
+      }
+    }
+
+    // Create Safe Apps Provider using ESM dynamic imports
+    async function createSafeProvider() {
+      try {
+        console.log('[Bridge] Loading Safe Apps SDK via ESM...')
+
+        // Dynamically import Safe Apps SDK and Provider from esm.sh
+        const [sdkModule, providerModule] = await Promise.all([
+          import('https://esm.sh/@safe-global/safe-apps-sdk@9.1.0'),
+          import('https://esm.sh/@safe-global/safe-apps-provider@0.18.6')
+        ])
+
+        console.log('[Bridge] SDK module loaded:', sdkModule)
+        console.log('[Bridge] Provider module loaded:', providerModule)
+
+        const SafeAppsSDK = sdkModule.default || sdkModule.SafeAppsSDK
+        const SafeAppProvider = providerModule.SafeAppProvider || providerModule.default
+
+        if (!SafeAppsSDK || !SafeAppProvider) {
+          console.log('[Bridge] Safe Apps SDK modules not properly loaded')
+          return null
+        }
+
+        console.log('[Bridge] Creating Safe SDK instance...')
+        const sdk = new SafeAppsSDK()
+
+        // Try to get Safe info to confirm we're in Safe
+        console.log('[Bridge] Getting Safe info...')
+        const safeInfo = await Promise.race([
+          sdk.safe.getInfo(),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 5000))
+        ])
+
+        console.log('[Bridge] Safe info received:', safeInfo)
+
+        if (safeInfo && safeInfo.safeAddress) {
+          console.log('[Bridge] Safe detected:', safeInfo.safeAddress)
+          const provider = new SafeAppProvider(safeInfo, sdk)
+          return { provider, name: 'Safe', safeInfo }
+        }
+      } catch (e) {
+        console.log('[Bridge] Not in Safe environment or error:', e.message, e)
+      }
+      return null
+    }
+
     // Get wallet name for a provider
     function getWalletName(provider) {
       if (!provider) return t('bridge.unknownApp')
+      // Safe Wallet detection
+      if (provider.isSafe || provider.isSafeWallet) return 'Safe'
       if (provider.isTokenPocket) return 'TokenPocket'
       if (provider.isTrust) return 'Trust Wallet'
       if (provider.isImToken) return 'imToken'
@@ -407,12 +469,34 @@
       if (provider.isBraveWallet) return 'Brave Wallet'
       if (provider.isPhantom) return 'Phantom'
       if (provider.isOneInch) return '1inch Wallet'
+      // Kraken Wallet detection
+      if (provider.isKraken) return 'Kraken Wallet'
       return t('bridge.wallet')
     }
 
-    // Detect and select provider
+    // Detect and select provider with retry mechanism for mobile wallets
     async function detectProvider() {
-      await new Promise(resolve => setTimeout(resolve, 200))
+      // First, check if we're in a Safe App environment
+      if (isSafeAppEnvironment()) {
+        console.log('[Bridge] Detected iframe environment, trying Safe Apps Provider...')
+
+        // In iframe (Safe App), ONLY try Safe Provider - don't fall back to other wallets
+        // Wait a bit for SDK to load
+        await new Promise(resolve => setTimeout(resolve, 500))
+
+        const safeResult = await createSafeProvider()
+        if (safeResult) {
+          return safeResult
+        }
+
+        // If Safe Provider failed in iframe, return null with specific error
+        // Don't try to detect other wallets (like Phantom browser extension)
+        console.log('[Bridge] Safe Apps Provider failed in iframe environment')
+        return { provider: null, name: null, isSafeError: true }
+      }
+
+      const maxRetries = 10
+      const retryDelay = 300  // 300ms between retries
 
       let walletSelection = null
       try {
@@ -425,37 +509,47 @@
         console.error('[Bridge] Failed to read wallet selection:', e)
       }
 
-      if (walletSelection?.source === 'eip6963' && walletSelection.uuid) {
-        const found = eip6963Providers.find(p => p.info.uuid === walletSelection.uuid)
-        if (found) {
-          return { provider: found.provider, name: found.info.name }
+      for (let attempt = 0; attempt < maxRetries; attempt++) {
+        await new Promise(resolve => setTimeout(resolve, retryDelay))
+
+        // Re-dispatch EIP-6963 request on each attempt
+        window.dispatchEvent(new Event('eip6963:requestProvider'))
+
+        // Try to find provider based on selection
+        if (walletSelection?.source === 'eip6963' && walletSelection.uuid) {
+          const found = eip6963Providers.find(p => p.info.uuid === walletSelection.uuid)
+          if (found) {
+            return { provider: found.provider, name: found.info.name }
+          }
+          if (walletSelection.index < eip6963Providers.length) {
+            const p = eip6963Providers[walletSelection.index]
+            return { provider: p.provider, name: p.info.name }
+          }
         }
-        if (walletSelection.index < eip6963Providers.length) {
-          const p = eip6963Providers[walletSelection.index]
+
+        if (eip6963Providers.length > 0) {
+          const p = eip6963Providers[0]
           return { provider: p.provider, name: p.info.name }
         }
-      }
 
-      if (eip6963Providers.length > 0) {
-        const p = eip6963Providers[0]
-        return { provider: p.provider, name: p.info.name }
-      }
-
-      const ethereum = window.ethereum
-      if (!ethereum) {
-        return { provider: null, name: null }
-      }
-
-      if (ethereum.providers && Array.isArray(ethereum.providers) && ethereum.providers.length > 0) {
-        const idx = walletSelection?.index ?? 0
-        if (idx >= 0 && idx < ethereum.providers.length) {
-          const provider = ethereum.providers[idx]
-          return { provider, name: getWalletName(provider) }
+        const ethereum = window.ethereum
+        if (ethereum) {
+          if (ethereum.providers && Array.isArray(ethereum.providers) && ethereum.providers.length > 0) {
+            const idx = walletSelection?.index ?? 0
+            if (idx >= 0 && idx < ethereum.providers.length) {
+              const provider = ethereum.providers[idx]
+              return { provider, name: getWalletName(provider) }
+            }
+            return { provider: ethereum.providers[0], name: getWalletName(ethereum.providers[0]) }
+          }
+          return { provider: ethereum, name: getWalletName(ethereum) }
         }
-        return { provider: ethereum.providers[0], name: getWalletName(ethereum.providers[0]) }
+
+        console.log('[Bridge] No wallet found, retrying... attempt', attempt + 1)
       }
 
-      return { provider: ethereum, name: getWalletName(ethereum) }
+      console.log('[Bridge] No wallet detected after', maxRetries, 'attempts')
+      return { provider: null, name: null }
     }
 
     // Show error
@@ -525,7 +619,15 @@
       providerName = detected.name
 
       if (!selectedProvider) {
-        showError(t('bridge.noWallet'), t('bridge.noWallet'))
+        if (detected.isSafeError) {
+          // Safe App environment but Safe Provider failed
+          showError(
+            LOCALE === 'zh' ? 'Safe 钱包连接失败' : 'Safe Wallet Connection Failed',
+            LOCALE === 'zh' ? '请确保在 Safe 钱包的 Apps 中打开此页面' : 'Please make sure to open this page in Safe Wallet Apps'
+          )
+        } else {
+          showError(t('bridge.noWallet'), t('bridge.noWallet'))
+        }
         return
       }
 
@@ -534,16 +636,22 @@
       try {
         updateStatus('loading', t('bridge.connectingWallet', { name: providerName }), t('bridge.authorizeInPopup'))
 
-        const accounts = await selectedProvider.request({ method: 'eth_requestAccounts' })
-        if (!accounts || accounts.length === 0) {
-          showError(t('bridge.error'), t('bridge.noAccount'))
-          return
+        // For Safe Apps Provider, we may already have the address from safeInfo
+        if (detected.safeInfo) {
+          currentAddress = detected.safeInfo.safeAddress
+          currentChainId = detected.safeInfo.chainId
+          console.log('[Bridge] Using Safe address:', currentAddress, 'chainId:', currentChainId)
+        } else {
+          const accounts = await selectedProvider.request({ method: 'eth_requestAccounts' })
+          if (!accounts || accounts.length === 0) {
+            showError(t('bridge.error'), t('bridge.noAccount'))
+            return
+          }
+          currentAddress = accounts[0]
+
+          const chainId = await selectedProvider.request({ method: 'eth_chainId' })
+          currentChainId = parseInt(chainId, 16)
         }
-
-        currentAddress = accounts[0]
-
-        const chainId = await selectedProvider.request({ method: 'eth_chainId' })
-        currentChainId = parseInt(chainId, 16)
 
         document.getElementById('walletName').textContent = providerName
         document.getElementById('walletAddress').textContent = formatAddress(currentAddress)
@@ -553,27 +661,30 @@
 
         connectWebSocket()
 
-        selectedProvider.on('chainChanged', (chainId) => {
-          currentChainId = parseInt(chainId, 16)
-          document.getElementById('walletNetwork').textContent = getChainName(currentChainId)
+        // Safe Apps Provider may not support event listeners in the same way
+        if (selectedProvider.on) {
+          selectedProvider.on('chainChanged', (chainId) => {
+            currentChainId = parseInt(chainId, 16)
+            document.getElementById('walletNetwork').textContent = getChainName(currentChainId)
 
-          if (ws && ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ type: 'chainChanged', chainId: currentChainId }))
-          }
-        })
+            if (ws && ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({ type: 'chainChanged', chainId: currentChainId }))
+            }
+          })
 
-        selectedProvider.on('accountsChanged', (accounts) => {
-          if (accounts.length === 0) {
-            disconnect()
-            return
-          }
-          currentAddress = accounts[0]
-          document.getElementById('walletAddress').textContent = formatAddress(currentAddress)
+          selectedProvider.on('accountsChanged', (accounts) => {
+            if (accounts.length === 0) {
+              disconnect()
+              return
+            }
+            currentAddress = accounts[0]
+            document.getElementById('walletAddress').textContent = formatAddress(currentAddress)
 
-          if (ws && ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ type: 'accountsChanged', accounts }))
-          }
-        })
+            if (ws && ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({ type: 'accountsChanged', accounts }))
+            }
+          })
+        }
 
       } catch (error) {
         showError(t('bridge.error'), error.message || t('common.retry'))

@@ -21,6 +21,28 @@ import { getCustomThemeCSS } from './config'
 const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3700
 const HOST = process.env.HOST || 'localhost'
 
+// Safe App manifest helper (with CORS headers for cross-origin iframe access)
+function getSafeManifest(request: Request) {
+  const protocol = request.headers.get('x-forwarded-proto') || 'http'
+  const host = request.headers.get('host') || `${HOST}:${PORT}`
+  const baseUrl = `${protocol}://${host}`
+
+  const manifest = {
+    name: 'Remote Inject',
+    description: 'Connect to DApps using your mobile wallet. Open-source WalletConnect alternative.',
+    iconPath: `${baseUrl}/logo.svg`,  // Absolute URL for cross-origin access
+  }
+
+  return new Response(JSON.stringify(manifest), {
+    headers: {
+      'Content-Type': 'application/json',
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type',
+    },
+  })
+}
+
 const app = new Elysia()
   // 健康检查端点
   .get('/health', () => {
@@ -35,6 +57,29 @@ const app = new Elysia()
   // 详细统计端点
   .get('/metrics', () => {
     return getStats()
+  })
+
+  // Safe App manifest for Safe Wallet compatibility
+  // https://docs.safe.global/safe-smart-account/safe-apps/releasing-your-safe-app
+  // Safe fetches manifest.json relative to the iframe URL, so we need to handle multiple paths
+  .get('/manifest.json', ({ request }) => getSafeManifest(request))
+  .get('/s/:id/manifest.json', ({ request }) => getSafeManifest(request))
+  .get('/demo/manifest.json', ({ request }) => getSafeManifest(request))
+  .get('/bridge/manifest.json', ({ request }) => getSafeManifest(request))
+  .get('/landing/manifest.json', ({ request }) => getSafeManifest(request))
+
+  // Logo with CORS headers for Safe App icon
+  .get('/logo.svg', async () => {
+    const logoPath = import.meta.dir + '/../public/logo.svg'
+    const file = Bun.file(logoPath)
+    const content = await file.text()
+    return new Response(content, {
+      headers: {
+        'Content-Type': 'image/svg+xml',
+        'Access-Control-Allow-Origin': '*',
+        'Cache-Control': 'public, max-age=86400',
+      },
+    })
   })
 
   // 创建 Session（带速率限制和容量检查）

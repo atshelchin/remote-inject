@@ -354,6 +354,8 @@
     // Get wallet name for a provider (fallback for non-EIP-6963 wallets)
     function getWalletName(provider) {
       if (!provider) return t('bridge.unknownApp')
+      // Safe Wallet detection
+      if (provider.isSafe || provider.isSafeWallet) return 'Safe'
       if (provider.isTokenPocket) return 'TokenPocket'
       if (provider.isTrust) return 'Trust Wallet'
       if (provider.isImToken) return 'imToken'
@@ -366,6 +368,8 @@
       if (provider.isBraveWallet) return 'Brave Wallet'
       if (provider.isPhantom) return 'Phantom'
       if (provider.isOneInch) return '1inch Wallet'
+      // Kraken Wallet detection
+      if (provider.isKraken) return 'Kraken Wallet'
       return t('bridge.wallet')
     }
 
@@ -473,52 +477,93 @@
       document.getElementById('status').innerHTML = '<span class="spinner"></span>' + t('landing.selectWallet')
     }
 
-    // Initialize wallet detection
-    async function initWalletDetection() {
-      await new Promise(resolve => setTimeout(resolve, 200))
-
-      const providers = detectAllProviders()
-      console.log('[Landing] Detected wallets:', providers.length, providers.map(p => p.name))
-
-      if (providers.length > 1) {
-        renderWalletSelector(providers)
-      } else if (providers.length === 1) {
-        const wallet = providers[0]
-        sessionStorage.setItem('selectedWallet', JSON.stringify({
-          index: wallet.index,
-          uuid: wallet.uuid,
-          source: wallet.source
-        }))
-
-        document.getElementById('status').className = 'status success'
-        document.getElementById('status').textContent = t('landing.walletDetected', { name: wallet.name })
-
-        setTimeout(() => {
-          window.location.href = getBridgeUrl()
-        }, 500)
-      } else {
-        document.getElementById('status').className = 'status error'
-        document.getElementById('status').textContent = t('landing.noWallet')
+    // Check if running inside Safe App iframe
+    function isSafeApp() {
+      try {
+        // Safe Apps run in iframe
+        if (window.parent !== window && window.self !== window.top) {
+          return true
+        }
+      } catch (e) {
+        // Cross-origin iframe access error - likely Safe or similar
+        return true
       }
+      return false
     }
 
-    // Initialize
+    // Initialize wallet detection with retry mechanism for mobile wallets
+    async function initWalletDetection() {
+      const maxRetries = 10
+      const retryDelay = 300  // 300ms between retries, total ~3s max wait
+
+      for (let attempt = 0; attempt < maxRetries; attempt++) {
+        // Wait before checking (give wallet time to inject)
+        await new Promise(resolve => setTimeout(resolve, retryDelay))
+
+        // Re-dispatch EIP-6963 request on each attempt
+        window.dispatchEvent(new Event('eip6963:requestProvider'))
+
+        // Check for EIP-6963 providers or window.ethereum
+        const hasProvider = eip6963Providers.length > 0 || typeof window.ethereum !== 'undefined'
+
+        if (hasProvider) {
+          const providers = detectAllProviders()
+          console.log('[Landing] Attempt', attempt + 1, '- Detected wallets:', providers.length, providers.map(p => p.name))
+
+          if (providers.length > 0) {
+            if (providers.length > 1) {
+              renderWalletSelector(providers)
+            } else {
+              const wallet = providers[0]
+              sessionStorage.setItem('selectedWallet', JSON.stringify({
+                index: wallet.index,
+                uuid: wallet.uuid,
+                source: wallet.source
+              }))
+
+              document.getElementById('status').className = 'status success'
+              document.getElementById('status').textContent = t('landing.walletDetected', { name: wallet.name })
+
+              setTimeout(() => {
+                window.location.href = getBridgeUrl()
+              }, 500)
+            }
+            return
+          }
+        }
+
+        // Log retry progress
+        if (attempt < maxRetries - 1) {
+          console.log('[Landing] No wallet found, retrying... attempt', attempt + 1)
+        }
+      }
+
+      // After all retries, show no wallet error
+      console.log('[Landing] No wallet detected after', maxRetries, 'attempts')
+      document.getElementById('status').className = 'status error'
+      document.getElementById('status').textContent = t('landing.noWallet')
+      document.getElementById('guide').style.display = 'block'
+    }
+
+    // Initialize - always try detection with retry mechanism
     if (!SESSION_ID) {
       document.getElementById('status').className = 'status error'
       document.getElementById('status').textContent = t('landing.invalidSession')
+    } else if (!SECRET) {
+      document.getElementById('status').className = 'status error'
+      document.getElementById('status').textContent = t('landing.invalidLink')
+    } else if (isSafeApp()) {
+      // In Safe App environment, skip wallet detection and go directly to bridge
+      // Bridge page will handle Safe Apps Provider creation
+      console.log('[Landing] Safe App detected, redirecting to bridge...')
+      document.getElementById('status').className = 'status success'
+      document.getElementById('status').textContent = 'Safe Wallet detected, connecting...'
+      setTimeout(() => {
+        window.location.href = getBridgeUrl()
+      }, 500)
     } else {
-      if (typeof window.ethereum !== 'undefined' || eip6963Providers.length > 0) {
-        if (!SECRET) {
-          document.getElementById('status').className = 'status error'
-          document.getElementById('status').textContent = t('landing.invalidLink')
-        } else {
-          initWalletDetection()
-        }
-      } else {
-        document.getElementById('status').className = 'status error'
-        document.getElementById('status').textContent = t('landing.noWalletEnv')
-        document.getElementById('guide').style.display = 'block'
-      }
+      // Always start detection - the retry mechanism will handle delayed injection
+      initWalletDetection()
     }
 
     function copyLink() {
