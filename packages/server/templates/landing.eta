@@ -557,7 +557,7 @@
       // Bridge page will handle Safe Apps Provider creation
       console.log('[Landing] Safe App detected, redirecting to bridge...')
       document.getElementById('status').className = 'status success'
-      document.getElementById('status').textContent = 'Safe Wallet detected, connecting...'
+      document.getElementById('status').textContent = t('landing.safeDetected')
       setTimeout(() => {
         window.location.href = getBridgeUrl()
       }, 500)

@@ -322,53 +322,63 @@
     <!-- Connect Card -->
     <div class="card" id="connectCard">
       <h2><%= it.t('demo.connectWallet') %></h2>
-      <div class="qr-container" id="qrContainer">
+
+      <!-- QR Code area - hidden until connection created -->
+      <div class="qr-container hidden" id="qrContainer">
         <div id="qrcode"></div>
+        <p style="margin-top: 16px; color: var(--color-text-secondary); font-size: 14px; text-align: center;">
+          <% if (it.locale === 'zh') { %>使用手机钱包扫描二维码连接<% } else { %>Scan QR code with your mobile wallet<% } %>
+        </p>
         <div class="session-url-container">
-          <div class="session-url" id="sessionUrl"><% if (it.locale === 'zh') { %>点击下方按钮开始<% } else { %>Click button below to start<% } %></div>
-          <button class="btn-copy hidden" id="copyBtn" onclick="copySessionUrl()"><%= it.t('common.copy') %></button>
+          <div class="session-url" id="sessionUrl"></div>
+          <button class="btn-copy" id="copyBtn" onclick="copySessionUrl()"><%= it.t('common.copy') %></button>
         </div>
       </div>
-      <!-- DApp config options -->
-      <div class="config-section" style="background: var(--color-bg-tertiary); border-radius: var(--radius-md); padding: 16px; margin-bottom: 20px;">
-        <div class="config-title" style="font-size: 13px; color: var(--color-text-muted); margin-bottom: 12px; text-transform: uppercase;">
-          <% if (it.locale === 'zh') { %>应用配置<% } else { %>App Config<% } %>
+
+      <!-- Config section - shown before connection -->
+      <div id="configSection">
+        <!-- DApp config options -->
+        <div class="config-section" style="background: var(--color-bg-tertiary); border-radius: var(--radius-md); padding: 16px; margin-bottom: 20px;">
+          <div class="config-title" style="font-size: 13px; color: var(--color-text-muted); margin-bottom: 12px; text-transform: uppercase;">
+            <% if (it.locale === 'zh') { %>应用配置<% } else { %>App Config<% } %>
+          </div>
+          <div class="config-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px;">
+            <div class="config-item">
+              <label style="display: block; color: var(--color-text-secondary); font-size: 12px; margin-bottom: 4px;"><% if (it.locale === 'zh') { %>应用名称<% } else { %>App Name<% } %></label>
+              <input type="text" id="appName" value="Remote Inject Demo" style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid var(--color-border); background: var(--color-bg-secondary); color: var(--color-text-primary); font-size: 14px;">
+            </div>
+            <div class="config-item">
+              <label style="display: block; color: var(--color-text-secondary); font-size: 12px; margin-bottom: 4px;"><% if (it.locale === 'zh') { %>应用 URL<% } else { %>App URL<% } %></label>
+              <input type="text" id="appUrl" placeholder="https://example.com" style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid var(--color-border); background: var(--color-bg-secondary); color: var(--color-text-primary); font-size: 14px;">
+            </div>
+            <div class="config-item">
+              <label style="display: block; color: var(--color-text-secondary); font-size: 12px; margin-bottom: 4px;"><% if (it.locale === 'zh') { %>Logo URL<% } else { %>Logo URL<% } %></label>
+              <input type="text" id="appIcon" placeholder="https://example.com/icon.png" style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid var(--color-border); background: var(--color-bg-secondary); color: var(--color-text-primary); font-size: 14px;">
+            </div>
+          </div>
         </div>
-        <div class="config-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px;">
-          <div class="config-item">
-            <label style="display: block; color: var(--color-text-secondary); font-size: 12px; margin-bottom: 4px;"><% if (it.locale === 'zh') { %>应用名称<% } else { %>App Name<% } %></label>
-            <input type="text" id="appName" value="Remote Inject Demo" style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid var(--color-border); background: var(--color-bg-secondary); color: var(--color-text-primary); font-size: 14px;">
+        <!-- Wallet page options (lang/theme passed to landing/bridge URLs) -->
+        <div class="options-row" style="display: flex; gap: 16px; justify-content: center; margin-bottom: 20px; flex-wrap: wrap;">
+          <div class="option-group" style="display: flex; align-items: center; gap: 8px;">
+            <label style="color: var(--color-text-secondary); font-size: 14px;"><% if (it.locale === 'zh') { %>钱包页语言<% } else { %>Wallet page lang<% } %></label>
+            <select id="walletLang" style="padding: 6px 12px; border-radius: 6px; border: 1px solid var(--color-border); background: var(--color-bg-tertiary); color: var(--color-text-primary); font-size: 14px;">
+              <option value=""><% if (it.locale === 'zh') { %>自动<% } else { %>Auto<% } %></option>
+              <% (it.availableLocales || ['en', 'zh']).forEach(loc => { %>
+                <option value="<%= loc %>"><%= localeNames[loc] || loc.toUpperCase() %></option>
+              <% }) %>
+            </select>
           </div>
-          <div class="config-item">
-            <label style="display: block; color: var(--color-text-secondary); font-size: 12px; margin-bottom: 4px;"><% if (it.locale === 'zh') { %>应用 URL<% } else { %>App URL<% } %></label>
-            <input type="text" id="appUrl" placeholder="https://example.com" style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid var(--color-border); background: var(--color-bg-secondary); color: var(--color-text-primary); font-size: 14px;">
-          </div>
-          <div class="config-item">
-            <label style="display: block; color: var(--color-text-secondary); font-size: 12px; margin-bottom: 4px;"><% if (it.locale === 'zh') { %>Logo URL<% } else { %>Logo URL<% } %></label>
-            <input type="text" id="appIcon" placeholder="https://example.com/icon.png" style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid var(--color-border); background: var(--color-bg-secondary); color: var(--color-text-primary); font-size: 14px;">
+          <div class="option-group" style="display: flex; align-items: center; gap: 8px;">
+            <label style="color: var(--color-text-secondary); font-size: 14px;"><% if (it.locale === 'zh') { %>钱包页主题<% } else { %>Wallet page theme<% } %></label>
+            <select id="walletTheme" style="padding: 6px 12px; border-radius: 6px; border: 1px solid var(--color-border); background: var(--color-bg-tertiary); color: var(--color-text-primary); font-size: 14px;">
+              <option value=""><% if (it.locale === 'zh') { %>自动<% } else { %>Auto<% } %></option>
+              <option value="light"><% if (it.locale === 'zh') { %>浅色<% } else { %>Light<% } %></option>
+              <option value="dark"><% if (it.locale === 'zh') { %>深色<% } else { %>Dark<% } %></option>
+            </select>
           </div>
         </div>
       </div>
-      <!-- Wallet page options (lang/theme passed to landing/bridge URLs) -->
-      <div class="options-row" style="display: flex; gap: 16px; justify-content: center; margin-bottom: 20px; flex-wrap: wrap;">
-        <div class="option-group" style="display: flex; align-items: center; gap: 8px;">
-          <label style="color: var(--color-text-secondary); font-size: 14px;"><% if (it.locale === 'zh') { %>钱包页语言<% } else { %>Wallet page lang<% } %></label>
-          <select id="walletLang" style="padding: 6px 12px; border-radius: 6px; border: 1px solid var(--color-border); background: var(--color-bg-tertiary); color: var(--color-text-primary); font-size: 14px;">
-            <option value=""><% if (it.locale === 'zh') { %>自动<% } else { %>Auto<% } %></option>
-            <% (it.availableLocales || ['en', 'zh']).forEach(loc => { %>
-              <option value="<%= loc %>"><%= localeNames[loc] || loc.toUpperCase() %></option>
-            <% }) %>
-          </select>
-        </div>
-        <div class="option-group" style="display: flex; align-items: center; gap: 8px;">
-          <label style="color: var(--color-text-secondary); font-size: 14px;"><% if (it.locale === 'zh') { %>钱包页主题<% } else { %>Wallet page theme<% } %></label>
-          <select id="walletTheme" style="padding: 6px 12px; border-radius: 6px; border: 1px solid var(--color-border); background: var(--color-bg-tertiary); color: var(--color-text-primary); font-size: 14px;">
-            <option value=""><% if (it.locale === 'zh') { %>自动<% } else { %>Auto<% } %></option>
-            <option value="light"><% if (it.locale === 'zh') { %>浅色<% } else { %>Light<% } %></option>
-            <option value="dark"><% if (it.locale === 'zh') { %>深色<% } else { %>Dark<% } %></option>
-          </select>
-        </div>
-      </div>
+
       <div class="btn-group" style="justify-content: center;">
         <button class="btn btn-primary" id="connectBtn" onclick="startConnect()"><%= it.t('demo.createConnection') %></button>
         <button class="btn btn-danger hidden" id="disconnectBtn" onclick="disconnect()"><%= it.t('demo.disconnectConnection') %></button>
@@ -463,6 +473,60 @@
       window.location.href = url.toString()
     }
 
+    // Session storage key
+    const SESSION_STORAGE_KEY = 'remoteInject_session'
+
+    // Save session to localStorage
+    function saveSession(sessionData) {
+      try {
+        localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify({
+          ...sessionData,
+          savedAt: Date.now()
+        }))
+      } catch (e) {
+        console.error('[Demo] Failed to save session:', e)
+      }
+    }
+
+    // Load session from localStorage
+    function loadSession() {
+      try {
+        const stored = localStorage.getItem(SESSION_STORAGE_KEY)
+        if (!stored) return null
+        const session = JSON.parse(stored)
+        // Session expires after 24 hours
+        if (Date.now() - session.savedAt > 24 * 60 * 60 * 1000) {
+          clearSession()
+          return null
+        }
+        return session
+      } catch (e) {
+        console.error('[Demo] Failed to load session:', e)
+        return null
+      }
+    }
+
+    // Clear session from localStorage
+    function clearSession() {
+      try {
+        localStorage.removeItem(SESSION_STORAGE_KEY)
+      } catch (e) {
+        console.error('[Demo] Failed to clear session:', e)
+      }
+    }
+
+    // Check if session is still valid on server
+    async function checkSessionValid(sessionId) {
+      try {
+        const res = await fetch(`/session/${sessionId}`)
+        if (!res.ok) return false
+        const data = await res.json()
+        return data.status !== 'expired'
+      } catch (e) {
+        return false
+      }
+    }
+
     // Inline Provider code (simplified for demo)
     class RemoteProvider {
       constructor() {
@@ -470,19 +534,26 @@
         this.serverUrl = ''
         this.sessionId = ''
         this.sessionUrl = ''
+        this.secret = ''  // Store secret for reconnection
         this.requestId = 0
         this.pendingRequests = new Map()
         this.eventListeners = new Map()
         this._chainId = '0x1'
         this._accounts = []
         this._connected = false
+        this._userInitiatedDisconnect = false
+        this._reconnectAttempts = 0
+        this._maxReconnectAttempts = 5
+        this._reconnectDelay = 1000
 
-        const events = ['connect', 'disconnect', 'chainChanged', 'accountsChanged', 'message']
+        const events = ['connect', 'disconnect', 'chainChanged', 'accountsChanged', 'message', 'reconnecting']
         events.forEach(event => this.eventListeners.set(event, new Set()))
       }
 
       async connect(serverUrl, metadata = {}) {
         this.serverUrl = serverUrl.replace(/\/$/, '')
+        this._userInitiatedDisconnect = false
+        this._reconnectAttempts = 0
 
         const response = await fetch(`${this.serverUrl}/session`, {
           method: 'POST',
@@ -497,6 +568,47 @@
         const data = await response.json()
         this.sessionId = data.id
         this.sessionUrl = data.url
+
+        // Extract secret from URL for reconnection
+        try {
+          const url = new URL(data.url)
+          this.secret = url.searchParams.get('k') || ''
+        } catch (e) {
+          this.secret = ''
+        }
+
+        await this.connectWebSocket()
+
+        // Save session for persistence
+        saveSession({
+          serverUrl: this.serverUrl,
+          sessionId: this.sessionId,
+          sessionUrl: this.sessionUrl,
+          secret: this.secret,
+          metadata
+        })
+
+        return {
+          sessionId: this.sessionId,
+          url: this.sessionUrl,
+        }
+      }
+
+      // Resume an existing session
+      async resumeSession(sessionData) {
+        this.serverUrl = sessionData.serverUrl
+        this.sessionId = sessionData.sessionId
+        this.sessionUrl = sessionData.sessionUrl
+        this.secret = sessionData.secret || ''
+        this._userInitiatedDisconnect = false
+        this._reconnectAttempts = 0
+
+        // Verify session is still valid
+        const isValid = await checkSessionValid(this.sessionId)
+        if (!isValid) {
+          clearSession()
+          throw new Error('Session expired or invalid')
+        }
 
         await this.connectWebSocket()
 
@@ -518,6 +630,7 @@
 
           this.ws.onopen = () => {
             clearTimeout(timeout)
+            this._reconnectAttempts = 0  // Reset on successful connection
           }
 
           this.ws.onmessage = (event) => {
@@ -530,9 +643,33 @@
             } catch {}
           }
 
-          this.ws.onclose = () => {
+          this.ws.onclose = (event) => {
             this._connected = false
-            this.emit('disconnect', { code: 4900, message: 'Disconnected' })
+
+            // Don't reconnect if user initiated disconnect
+            if (this._userInitiatedDisconnect) {
+              this.emit('disconnect', { code: 4900, message: 'User disconnected', userInitiated: true })
+              return
+            }
+
+            // Try to reconnect for non-user-initiated disconnects
+            if (this._reconnectAttempts < this._maxReconnectAttempts) {
+              this._reconnectAttempts++
+              const delay = this._reconnectDelay * Math.pow(1.5, this._reconnectAttempts - 1)
+              console.log(`[RemoteProvider] Connection lost, reconnecting in ${delay}ms (attempt ${this._reconnectAttempts}/${this._maxReconnectAttempts})`)
+
+              this.emit('reconnecting', { attempt: this._reconnectAttempts, maxAttempts: this._maxReconnectAttempts })
+
+              setTimeout(() => {
+                if (!this._userInitiatedDisconnect) {
+                  this.connectWebSocket().catch(err => {
+                    console.error('[RemoteProvider] Reconnect failed:', err)
+                  })
+                }
+              }, delay)
+            } else {
+              this.emit('disconnect', { code: 4900, message: 'Connection lost', userInitiated: false })
+            }
           }
 
           this.ws.onerror = (error) => {
@@ -686,13 +823,17 @@
       }
 
       disconnect() {
+        this._userInitiatedDisconnect = true  // Mark as user-initiated
         if (this.ws) {
-          this.ws.send(JSON.stringify({ type: 'disconnect', reason: 'User initiated' }))
+          try {
+            this.ws.send(JSON.stringify({ type: 'disconnect', reason: 'User initiated' }))
+          } catch (e) {}
           this.ws.close()
           this.ws = null
         }
         this._connected = false
         this._accounts = []
+        clearSession()  // Clear stored session on user disconnect
       }
 
       get isConnected() {
@@ -757,6 +898,10 @@
     // Start connect
     window.startConnect = async function() {
       try {
+        // Clear any existing session when starting new connection
+        clearSession()
+        document.getElementById('resumeBtn')?.remove()
+
         document.getElementById('connectBtn').disabled = true
         updateStatus('connecting', t('demo.waitingConnection'))
         logResult(LOCALE === 'zh' ? '创建 Session...' : 'Creating session...', 'info')
@@ -777,9 +922,20 @@
           logResult(LOCALE === 'zh' ? `已断开: ${info.message}` : `Disconnected: ${info.message}`, 'error')
           updateStatus('disconnected', t('demo.notConnected'))
 
-          document.getElementById('connectBtn').classList.remove('hidden')
-          document.getElementById('disconnectBtn').classList.add('hidden')
-          document.getElementById('connectBtn').disabled = false
+          // Only show connect button if user initiated or max reconnects reached
+          if (info.userInitiated || !provider || provider._reconnectAttempts >= provider._maxReconnectAttempts) {
+            document.getElementById('connectBtn').classList.remove('hidden')
+            document.getElementById('disconnectBtn').classList.add('hidden')
+            document.getElementById('connectBtn').disabled = false
+            document.getElementById('qrcode').innerHTML = ''
+            document.getElementById('sessionUrl').textContent = LOCALE === 'zh' ? '点击下方按钮开始' : 'Click button below to start'
+            document.getElementById('copyBtn').classList.add('hidden')
+          }
+        })
+
+        provider.on('reconnecting', (info) => {
+          logResult(LOCALE === 'zh' ? `正在重连... (${info.attempt}/${info.maxAttempts})` : `Reconnecting... (${info.attempt}/${info.maxAttempts})`, 'info')
+          updateStatus('connecting', LOCALE === 'zh' ? '重新连接中...' : 'Reconnecting...')
         })
 
         provider.on('chainChanged', (chainId) => {
@@ -806,9 +962,11 @@
           icon: appIcon,
         })
 
-        // Show cancel button immediately after session created
+        // Show cancel button and QR area, hide config
         document.getElementById('connectBtn').classList.add('hidden')
         document.getElementById('disconnectBtn').classList.remove('hidden')
+        document.getElementById('configSection').classList.add('hidden')
+        document.getElementById('qrContainer').classList.remove('hidden')
 
         logResult(LOCALE === 'zh' ? `Session 已创建: ${sessionId}` : `Session created: ${sessionId}`, 'info')
         logResult(LOCALE === 'zh' ? '等待移动钱包扫码...' : 'Waiting for mobile wallet to scan...', 'info')
@@ -824,13 +982,12 @@
 
         // Show QR code and link
         document.getElementById('sessionUrl').textContent = finalUrl
-        document.getElementById('copyBtn').classList.remove('hidden')
         const qrcodeContainer = document.getElementById('qrcode')
         qrcodeContainer.innerHTML = ''
         new QRCode(qrcodeContainer, {
           text: finalUrl,
-          width: 200,
-          height: 200,
+          width: 220,
+          height: 220,
           colorDark: '#1a1a2e',
           colorLight: '#ffffff',
           correctLevel: QRCode.CorrectLevel.M
@@ -857,6 +1014,125 @@
       document.getElementById('disconnectBtn').classList.add('hidden')
       document.getElementById('connectBtn').disabled = false
     }
+
+    // Resume existing session
+    window.resumeSession = async function() {
+      const sessionData = loadSession()
+      if (!sessionData) {
+        logResult(LOCALE === 'zh' ? '没有可恢复的会话' : 'No session to resume', 'error')
+        return
+      }
+
+      try {
+        document.getElementById('connectBtn').disabled = true
+        document.getElementById('resumeBtn')?.remove()
+        updateStatus('connecting', LOCALE === 'zh' ? '恢复连接中...' : 'Resuming connection...')
+        logResult(LOCALE === 'zh' ? `恢复 Session: ${sessionData.sessionId}` : `Resuming session: ${sessionData.sessionId}`, 'info')
+
+        provider = new RemoteProvider()
+
+        // Listen for events (same as startConnect)
+        provider.on('connect', (info) => {
+          logResult(LOCALE === 'zh' ? `已连接，链 ID: ${info.chainId}` : `Connected, Chain ID: ${info.chainId}`, 'info')
+          updateStatus('connected', t('bridge.connected'))
+
+          document.getElementById('walletAddress').textContent = provider.accounts[0]
+          document.getElementById('walletChainId').textContent = provider.chainId
+          document.getElementById('walletSession').textContent = provider.session.id
+        })
+
+        provider.on('disconnect', (info) => {
+          logResult(LOCALE === 'zh' ? `已断开: ${info.message}` : `Disconnected: ${info.message}`, 'error')
+          updateStatus('disconnected', t('demo.notConnected'))
+
+          if (info.userInitiated || !provider || provider._reconnectAttempts >= provider._maxReconnectAttempts) {
+            document.getElementById('connectBtn').classList.remove('hidden')
+            document.getElementById('disconnectBtn').classList.add('hidden')
+            document.getElementById('connectBtn').disabled = false
+            document.getElementById('qrcode').innerHTML = ''
+            document.getElementById('sessionUrl').textContent = LOCALE === 'zh' ? '点击下方按钮开始' : 'Click button below to start'
+            document.getElementById('copyBtn').classList.add('hidden')
+          }
+        })
+
+        provider.on('reconnecting', (info) => {
+          logResult(LOCALE === 'zh' ? `正在重连... (${info.attempt}/${info.maxAttempts})` : `Reconnecting... (${info.attempt}/${info.maxAttempts})`, 'info')
+          updateStatus('connecting', LOCALE === 'zh' ? '重新连接中...' : 'Reconnecting...')
+        })
+
+        provider.on('chainChanged', (chainId) => {
+          logResult(LOCALE === 'zh' ? `链已切换: ${chainId}` : `Chain changed: ${chainId}`, 'info')
+          document.getElementById('walletChainId').textContent = chainId
+        })
+
+        provider.on('accountsChanged', (accounts) => {
+          if (accounts.length > 0) {
+            logResult(LOCALE === 'zh' ? `账户已切换: ${accounts[0]}` : `Account changed: ${accounts[0]}`, 'info')
+            document.getElementById('walletAddress').textContent = accounts[0]
+          }
+        })
+
+        await provider.resumeSession(sessionData)
+
+        document.getElementById('connectBtn').classList.add('hidden')
+        document.getElementById('disconnectBtn').classList.remove('hidden')
+
+        // Show QR code and link
+        let finalUrl = sessionData.sessionUrl
+        const walletLang = document.getElementById('walletLang').value
+        const walletTheme = document.getElementById('walletTheme').value
+        const urlObj = new URL(finalUrl)
+        if (walletLang) urlObj.searchParams.set('lang', walletLang)
+        if (walletTheme) urlObj.searchParams.set('theme', walletTheme)
+        finalUrl = urlObj.toString()
+
+        document.getElementById('sessionUrl').textContent = finalUrl
+        document.getElementById('copyBtn').classList.remove('hidden')
+        const qrcodeContainer = document.getElementById('qrcode')
+        qrcodeContainer.innerHTML = ''
+        new QRCode(qrcodeContainer, {
+          text: finalUrl,
+          width: 200,
+          height: 200,
+          colorDark: '#1a1a2e',
+          colorLight: '#ffffff',
+          correctLevel: QRCode.CorrectLevel.M
+        })
+
+        logResult(LOCALE === 'zh' ? '等待移动钱包重新连接...' : 'Waiting for mobile wallet to reconnect...', 'info')
+
+      } catch (error) {
+        logResult(LOCALE === 'zh' ? `恢复失败: ${error.message}` : `Resume failed: ${error.message}`, 'error')
+        updateStatus('disconnected', t('demo.notConnected'))
+        document.getElementById('connectBtn').disabled = false
+        clearSession()
+      }
+    }
+
+    // Check for existing session on page load
+    ;(async function checkExistingSession() {
+      const sessionData = loadSession()
+      if (sessionData) {
+        const isValid = await checkSessionValid(sessionData.sessionId)
+        if (isValid) {
+          logResult(LOCALE === 'zh' ? `发现未完成的会话: ${sessionData.sessionId}` : `Found existing session: ${sessionData.sessionId}`, 'info')
+
+          // Add resume button
+          const connectBtn = document.getElementById('connectBtn')
+          const resumeBtn = document.createElement('button')
+          resumeBtn.id = 'resumeBtn'
+          resumeBtn.className = 'btn btn-secondary'
+          resumeBtn.textContent = LOCALE === 'zh' ? '恢复连接' : 'Resume'
+          resumeBtn.onclick = resumeSession
+          connectBtn.parentNode.insertBefore(resumeBtn, connectBtn)
+
+          // Update connect button text
+          connectBtn.textContent = LOCALE === 'zh' ? '新建连接' : 'New Session'
+        } else {
+          clearSession()
+        }
+      }
+    })()
 
     // Copy link
     window.copySessionUrl = async function() {

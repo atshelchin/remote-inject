@@ -98,6 +98,11 @@ const translations: Record<string, Record<string, string>> = {
     'bridge.connectingApp': '正在连接应用...',
     'bridge.almostDone': '即将完成',
     'bridge.unknownApp': '未知应用',
+    'bridge.safeWalletFailed': 'Safe 钱包连接失败',
+    'bridge.safeWalletOpenInApps': '请确保在 Safe 钱包的 Apps 中打开此页面',
+    'bridge.reconnecting': '重新连接中... ({attempt}/{maxAttempts})',
+    'bridge.networkDisconnected': '网络连接断开，正在尝试重连',
+    'landing.safeDetected': '检测到 Safe 钱包，正在连接...',
 
     // Methods
     'method.personal_sign': '签名消息',
@@ -181,6 +186,11 @@ const translations: Record<string, Record<string, string>> = {
     'bridge.connectingApp': 'Connecting to app...',
     'bridge.almostDone': 'Almost done',
     'bridge.unknownApp': 'Unknown App',
+    'bridge.safeWalletFailed': 'Safe Wallet Connection Failed',
+    'bridge.safeWalletOpenInApps': 'Please make sure to open this page in Safe Wallet Apps',
+    'bridge.reconnecting': 'Reconnecting... ({attempt}/{maxAttempts})',
+    'bridge.networkDisconnected': 'Network disconnected, trying to reconnect',
+    'landing.safeDetected': 'Safe Wallet detected, connecting...',
 
     // Methods
     'method.personal_sign': 'Sign Message',

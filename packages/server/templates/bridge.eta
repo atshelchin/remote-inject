@@ -378,6 +378,10 @@
     let pendingRequestCount = 0
     let selectedProvider = null
     let providerName = null
+    let userInitiatedDisconnect = false
+    let reconnectAttempts = 0
+    const maxReconnectAttempts = 5
+    const reconnectDelay = 1000
 
     // EIP-6963 wallet discovery
     const eip6963Providers = []
@@ -600,8 +604,11 @@
 
     // Disconnect
     function disconnect() {
+      userInitiatedDisconnect = true  // Mark as user-initiated
       if (ws) {
-        ws.send(JSON.stringify({ type: 'disconnect', reason: 'User initiated' }))
+        try {
+          ws.send(JSON.stringify({ type: 'disconnect', reason: 'User initiated' }))
+        } catch (e) {}
         ws.close()
       }
       showError(t('bridge.disconnected'), t('bridge.userDisconnected'))
@@ -609,6 +616,9 @@
 
     // Initialize
     async function init() {
+      userInitiatedDisconnect = false
+      reconnectAttempts = 0
+
       if (!SESSION_ID || !SECRET) {
         showError(t('bridge.invalidLink'), t('bridge.sessionExpired'))
         return
@@ -621,10 +631,7 @@
       if (!selectedProvider) {
         if (detected.isSafeError) {
           // Safe App environment but Safe Provider failed
-          showError(
-            LOCALE === 'zh' ? 'Safe 钱包连接失败' : 'Safe Wallet Connection Failed',
-            LOCALE === 'zh' ? '请确保在 Safe 钱包的 Apps 中打开此页面' : 'Please make sure to open this page in Safe Wallet Apps'
-          )
+          showError(t('bridge.safeWalletFailed'), t('bridge.safeWalletOpenInApps'))
         } else {
           showError(t('bridge.noWallet'), t('bridge.noWallet'))
         }
@@ -708,7 +715,9 @@
 
       ws = new WebSocket(wsUrl)
 
-      ws.onopen = () => {}
+      ws.onopen = () => {
+        reconnectAttempts = 0  // Reset on successful connection
+      }
 
       ws.onmessage = async (event) => {
         try {
@@ -732,6 +741,7 @@
               break
 
             case 'disconnect':
+              userInitiatedDisconnect = true  // DApp initiated disconnect
               showError(t('bridge.disconnected'), t('bridge.peerDisconnected'))
               break
           }
@@ -743,15 +753,47 @@
       ws.onclose = (event) => {
         if (document.getElementById('mainView').classList.contains('hidden')) return
 
-        if (event.code === 1008) {
-          showError(t('bridge.error'), t('bridge.connectionRejected'))
+        // Don't reconnect if user or peer initiated disconnect
+        if (userInitiatedDisconnect) {
+          if (event.code === 1008) {
+            showError(t('bridge.error'), t('bridge.connectionRejected'))
+          } else {
+            showError(t('bridge.disconnected'), t('bridge.reconnect'))
+          }
+          return
+        }
+
+        // Try to reconnect for network issues
+        if (reconnectAttempts < maxReconnectAttempts) {
+          reconnectAttempts++
+          const delay = reconnectDelay * Math.pow(1.5, reconnectAttempts - 1)
+          console.log(`[Bridge] Connection lost, reconnecting in ${delay}ms (attempt ${reconnectAttempts}/${maxReconnectAttempts})`)
+
+          updateStatus('loading',
+            t('bridge.reconnecting', { attempt: reconnectAttempts, maxAttempts: maxReconnectAttempts }),
+            t('bridge.networkDisconnected')
+          )
+
+          setTimeout(() => {
+            if (!userInitiatedDisconnect) {
+              connectWebSocket()
+            }
+          }, delay)
         } else {
-          showError(t('bridge.disconnected'), t('bridge.reconnect'))
+          // Max reconnects reached
+          if (event.code === 1008) {
+            showError(t('bridge.error'), t('bridge.connectionRejected'))
+          } else {
+            showError(t('bridge.disconnected'), t('bridge.reconnect'))
+          }
         }
       }
 
       ws.onerror = () => {
-        showError(t('bridge.error'), t('bridge.connectionFailed'))
+        // Only show error if not reconnecting
+        if (reconnectAttempts >= maxReconnectAttempts) {
+          showError(t('bridge.error'), t('bridge.connectionFailed'))
+        }
       }
     }
 
