@@ -332,6 +332,91 @@
     const SECRET = '<%= it.secret %>'
     const LOCALE = '<%= it.locale %>'
 
+    // Safe App iframe detection
+    function isSafeAppIframe() {
+      try {
+        return window.parent !== window && window.self !== window.top
+      } catch (e) {
+        return true // Cross-origin iframe
+      }
+    }
+
+    // Apply stored params for Safe App iframe (where URL params might be lost during navigation)
+    // Tries multiple sources: URL hash, localStorage, sessionStorage
+    (function() {
+      if (!isSafeAppIframe()) return // Only apply in Safe App iframe environment
+
+      try {
+        let lang = null, theme = null
+
+        // Source 1: URL hash (most reliable for Safe App)
+        const hash = window.location.hash
+        if (hash && hash.startsWith('#ri=')) {
+          try {
+            const hashData = JSON.parse(decodeURIComponent(hash.slice(4)))
+            lang = hashData.lang
+            theme = hashData.theme
+            console.log('[Bridge] Recovered params from URL hash:', { lang, theme })
+          } catch (e) {}
+        }
+
+        // Source 2: localStorage (backup)
+        if (!lang && !theme) {
+          try {
+            const stored = localStorage.getItem('ri_bridge_params')
+            if (stored) {
+              const data = JSON.parse(stored)
+              // Only use if stored recently (within 5 minutes)
+              if (data.ts && Date.now() - data.ts < 300000) {
+                lang = data.lang
+                theme = data.theme
+                console.log('[Bridge] Recovered params from localStorage:', { lang, theme })
+              }
+              localStorage.removeItem('ri_bridge_params') // Clean up
+            }
+          } catch (e) {}
+        }
+
+        // Source 3: sessionStorage (legacy fallback)
+        if (!lang && !theme) {
+          try {
+            const stored = sessionStorage.getItem('ri_bridge_params')
+            if (stored) {
+              const data = JSON.parse(stored)
+              lang = data.lang
+              theme = data.theme
+              sessionStorage.removeItem('ri_bridge_params')
+              console.log('[Bridge] Recovered params from sessionStorage:', { lang, theme })
+            }
+          } catch (e) {}
+        }
+
+        if (!lang && !theme) return
+
+        // Check current URL params
+        const currentUrl = new URL(window.location.href)
+        const urlLang = currentUrl.searchParams.get('lang')
+        const urlTheme = currentUrl.searchParams.get('theme')
+
+        // If params differ, reload with correct params (and clean hash)
+        if ((lang && lang !== urlLang) || (theme && theme !== urlTheme)) {
+          if (lang) currentUrl.searchParams.set('lang', lang)
+          if (theme) currentUrl.searchParams.set('theme', theme)
+          currentUrl.hash = '' // Remove hash after reading
+          console.log('[Bridge] Reloading with correct params:', currentUrl.toString())
+          window.location.replace(currentUrl.toString())
+          return
+        }
+
+        // Apply theme immediately if present (in case SSR didn't catch it)
+        if (theme && (theme === 'dark' || theme === 'light')) {
+          document.documentElement.setAttribute('data-theme', theme)
+        }
+      } catch (e) {
+        console.log('[Bridge] Error recovering params:', e)
+      }
+    })();
+
     // i18n translations (from server)
     const I18N = JSON.parse(document.getElementById('i18n-data').textContent)
 

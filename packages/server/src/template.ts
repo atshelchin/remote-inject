@@ -332,10 +332,16 @@ export function renderPage(
   const url = new URL(request.url)
   const cookies = parseCookies(request.headers.get('cookie'))
 
-  // Priority: URL param > cookie > Accept-Language header
+  // Extract force options from data (used by /s/:id to pass params without redirect)
+  const forceLang = data.forceLang as string | undefined
+  const forceTheme = data.forceTheme as string | undefined
+
+  // Priority: forceLang > URL param > cookie > Accept-Language header
   const langParam = url.searchParams.get('lang')
   let locale: string
-  if (langParam && isLocaleSupported(langParam)) {
+  if (forceLang && isLocaleSupported(forceLang)) {
+    locale = forceLang
+  } else if (langParam && isLocaleSupported(langParam)) {
     locale = langParam
   } else if (cookies['locale'] && isLocaleSupported(cookies['locale'])) {
     locale = cookies['locale']
@@ -344,10 +350,12 @@ export function renderPage(
     locale = detectLocale(acceptLanguage)
   }
 
-  // Priority: URL param > cookie > null (use system/saved preference)
+  // Priority: forceTheme > URL param > cookie > null (use system/saved preference)
   const themeParam = url.searchParams.get('theme')
   let theme: string | null = null
-  if (themeParam === 'dark' || themeParam === 'light') {
+  if (forceTheme === 'dark' || forceTheme === 'light') {
+    theme = forceTheme
+  } else if (themeParam === 'dark' || themeParam === 'light') {
     theme = themeParam
   } else if (cookies['theme'] === 'dark' || cookies['theme'] === 'light') {
     theme = cookies['theme']

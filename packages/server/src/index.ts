@@ -148,18 +148,47 @@ const app = new Elysia()
     }
   })
 
-  // 短链接重定向到落地页
-  .get('/s/:id', ({ params, query, redirect }: { params: { id: string }; query: { k?: string; lang?: string; theme?: string }; redirect: (url: string) => Response }) => {
+  // 短链接 - 直接渲染 landing 页面（不用重定向，避免 Safe Wallet iframe 丢失参数）
+  .get('/s/:id', ({ params, query, request }: { params: { id: string }; query: { k?: string; lang?: string; theme?: string }; request: Request }) => {
     const session = getSession(params.id)
     if (!session) {
       return new Response('Session not found', { status: 404 })
     }
-    // 传递 secret (k 参数) 和可选的 lang/theme 参数
+
     const secret = query.k || ''
-    let redirectUrl = `/landing?session=${params.id}&k=${secret}`
-    if (query.lang) redirectUrl += `&lang=${query.lang}`
-    if (query.theme) redirectUrl += `&theme=${query.theme}`
-    return redirect(redirectUrl)
+
+    // Prepare DApp metadata for SSR
+    let dapp = null
+    if (session.metadata) {
+      try {
+        const url = new URL(session.metadata.url)
+        dapp = {
+          name: session.metadata.name,
+          icon: session.metadata.icon,
+          host: url.host,
+        }
+      } catch {
+        dapp = {
+          name: session.metadata.name,
+          icon: session.metadata.icon,
+          host: session.metadata.url,
+        }
+      }
+    }
+
+    // Render landing page directly with params embedded in HTML
+    const html = renderPage('landing', request, {
+      sessionId: params.id,
+      secret,
+      dapp,
+      // Pass lang/theme from URL query to force override
+      forceLang: query.lang,
+      forceTheme: query.theme,
+    })
+
+    return new Response(html, {
+      headers: { 'Content-Type': 'text/html; charset=utf-8' },
+    })
   })
 
   // Landing 页面 (SSR with i18n)

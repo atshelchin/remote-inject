@@ -837,13 +837,17 @@ bun run --filter @shelchin/remote-inject-server build</code></pre>
           url = new URL(urlStr)
         }
 
+        // Extract lang and theme from pasted URL (if present)
+        const lang = url.searchParams.get('lang')
+        const theme = url.searchParams.get('theme')
+
         // Check for /s/:id format
         const pathMatch = url.pathname.match(/\/s\/([A-Za-z0-9]+)/)
         if (pathMatch) {
           const sessionId = pathMatch[1]
           const secret = url.searchParams.get('k')
           if (sessionId && secret) {
-            return { sessionId, secret }
+            return { sessionId, secret, lang, theme }
           }
         }
 
@@ -851,7 +855,7 @@ bun run --filter @shelchin/remote-inject-server build</code></pre>
         const sessionId = url.searchParams.get('session')
         const secret = url.searchParams.get('k')
         if (sessionId && secret) {
-          return { sessionId, secret }
+          return { sessionId, secret, lang, theme }
         }
 
         return null
@@ -886,8 +890,26 @@ bun run --filter @shelchin/remote-inject-server build</code></pre>
         return
       }
 
-      // Redirect to bridge page
-      const bridgeUrl = `/bridge?session=${encodeURIComponent(parsed.sessionId)}&k=${encodeURIComponent(parsed.secret)}`
+      // Build bridge URL with lang/theme params
+      let bridgeUrl = `/bridge?session=${encodeURIComponent(parsed.sessionId)}&k=${encodeURIComponent(parsed.secret)}`
+
+      // Use lang/theme from pasted URL if available, otherwise use current page settings
+      const lang = parsed.lang || LOCALE
+      const theme = parsed.theme || ThemeManager.current
+
+      if (lang) bridgeUrl += `&lang=${encodeURIComponent(lang)}`
+      if (theme) bridgeUrl += `&theme=${encodeURIComponent(theme)}`
+
+      // For Safe App: also store in localStorage and URL hash as backup
+      if (isSafeApp() && (lang || theme)) {
+        const paramsData = JSON.stringify({ lang, theme, ts: Date.now() })
+        try {
+          localStorage.setItem('ri_bridge_params', paramsData)
+        } catch (e) {}
+        bridgeUrl += '#ri=' + encodeURIComponent(paramsData)
+      }
+
+      console.log('[Index] Navigating to bridge:', bridgeUrl)
       window.location.href = bridgeUrl
     }
 

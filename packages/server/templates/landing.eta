@@ -306,11 +306,27 @@
     const LOCALE = '<%= it.locale %>'
     const THEME = '<%= it.theme || '' %>'
 
-    // Build bridge URL with lang/theme params
+    // Build bridge URL with lang/theme params (preserve any URL query params)
     function getBridgeUrl() {
+      const currentParams = new URLSearchParams(window.location.search)
       let url = `/bridge?session=${SESSION_ID}&k=${SECRET}`
-      if (LOCALE) url += `&lang=${LOCALE}`
-      if (THEME) url += `&theme=${THEME}`
+      // Priority: URL param > SSR value
+      const lang = currentParams.get('lang') || LOCALE
+      const theme = currentParams.get('theme') || THEME
+      if (lang) url += `&lang=${lang}`
+      if (theme) url += `&theme=${theme}`
+
+      // For Safe App iframe: store in localStorage AND URL hash (double backup)
+      // Safe's iframe navigation might strip query params and block sessionStorage
+      if (isSafeApp() && (lang || theme)) {
+        const paramsData = JSON.stringify({ lang, theme, ts: Date.now() })
+        try {
+          localStorage.setItem('ri_bridge_params', paramsData)
+        } catch (e) {}
+        // Also encode in URL hash as backup
+        url += '#ri=' + encodeURIComponent(paramsData)
+      }
+
       return url
     }
 
