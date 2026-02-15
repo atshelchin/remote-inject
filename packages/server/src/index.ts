@@ -1,4 +1,5 @@
 import { Elysia } from 'elysia'
+import { cors } from '@elysiajs/cors'
 import { staticPlugin } from '@elysiajs/static'
 import { IS_COMPILED, handleEmbeddedStatic } from './static'
 import {
@@ -20,6 +21,32 @@ import { getCustomThemeCSS } from './config'
 
 const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3700
 const HOST = process.env.HOST || 'localhost'
+
+// CORS configuration: localhost always allowed, additional origins from CORS_ORIGINS env
+// CORS_ORIGINS can be comma-separated list of origins, or '*' for all origins
+const CORS_ORIGINS = process.env.CORS_ORIGINS || ''
+function getCorsOrigins(): string[] | true {
+  if (CORS_ORIGINS === '*') {
+    return true // Allow all origins
+  }
+  const origins = ['http://localhost', 'https://localhost']
+  // Add localhost with common ports
+  const commonPorts = [3000, 3001, 4000, 5000, 5173, 5174, 5175, 5176, 5177, 5178, 5179, 8000, 8080]
+  commonPorts.forEach(port => {
+    origins.push(`http://localhost:${port}`)
+    origins.push(`http://127.0.0.1:${port}`)
+  })
+  // Add custom origins from env
+  if (CORS_ORIGINS) {
+    CORS_ORIGINS.split(',').forEach(origin => {
+      const trimmed = origin.trim()
+      if (trimmed && !origins.includes(trimmed)) {
+        origins.push(trimmed)
+      }
+    })
+  }
+  return origins
+}
 
 // Safe App manifest helper (with CORS headers for cross-origin iframe access)
 function getSafeManifest(request: Request) {
@@ -44,6 +71,14 @@ function getSafeManifest(request: Request) {
 }
 
 const app = new Elysia()
+  // CORS support
+  .use(cors({
+    origin: getCorsOrigins(),
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    credentials: true,
+  }))
+
   // 健康检查端点
   .get('/health', () => {
     const stats = getStats()

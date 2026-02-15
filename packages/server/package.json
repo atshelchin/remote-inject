@@ -17,6 +17,7 @@
     "test:e2e:headed": "playwright test --headed"
   },
   "dependencies": {
+    "@elysiajs/cors": "^1.4.1",
     "@elysiajs/static": "^1.2.0",
     "elysia": "^1.2.0",
     "eta": "^4.5.1"
