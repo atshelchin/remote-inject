@@ -844,7 +844,6 @@ bun run --filter @shelchin/remote-inject-server build</code></pre>
       })
     }
   </script>
-  <%~ include('partials/footer', it) %>
   <%~ include('partials/analytics', it) %>
 </body>
 </html>
