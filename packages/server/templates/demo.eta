@@ -2418,5 +2418,6 @@
       }
     }
   </script>
+  <%~ include('partials/analytics', it) %>
 </body>
 </html>

@@ -785,5 +785,6 @@
   </script>
 
   <%~ include('partials/footer', it) %>
+  <%~ include('partials/analytics', it) %>
 </body>
 </html>
