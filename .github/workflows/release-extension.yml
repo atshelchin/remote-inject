@@ -51,6 +51,10 @@ jobs:
         if: steps.version.outputs.changed == 'true'
         run: bun install
 
+      - name: Build SDK dependency
+        if: steps.version.outputs.changed == 'true'
+        run: cd packages/sdk && bun run build
+
       - name: Build & Zip extension
         if: steps.version.outputs.changed == 'true'
         run: cd packages/chrome-extension && bun run zip
