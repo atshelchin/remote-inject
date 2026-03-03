@@ -107,13 +107,8 @@
       <ConnectedView account={state.account} chainId={state.chainId ?? '0x1'} />
     {/if}
     <div class="reconnecting-banner">
-      <div class="spinner small"></div>
-      <span class="banner-text">Connection lost, reconnecting...</span>
-      <button class="retry-btn" onclick={reconnect} title="Retry now">
-        <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-          <path d="M13.65 2.35A7.96 7.96 0 0 0 8 0C3.58 0 0 3.58 0 8s3.58 8 8 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 8 14 6 6 0 1 1 8 2c1.66 0 3.14.69 4.22 1.78L9 7h7V0l-2.35 2.35Z" fill="currentColor"/>
-        </svg>
-      </button>
+      <span class="banner-text">Connection lost</span>
+      <button class="reconnect-btn" onclick={reconnect}>Reconnect</button>
     </div>
     {#if debugMode}
       {#if state.sessionUrl}
@@ -184,7 +179,7 @@
     background: none;
     border: 1px solid transparent;
     border-radius: 6px;
-    color: #475569;
+    color: #64748b;
     cursor: pointer;
     padding: 4px;
     display: flex;
@@ -194,7 +189,7 @@
   }
 
   .debug-toggle:hover {
-    color: #94a3b8;
+    color: #cbd5e1;
     background: #1e293b;
   }
 
@@ -322,23 +317,21 @@
     flex: 1;
   }
 
-  .retry-btn {
-    background: none;
-    border: 1px solid #78350f;
+  .reconnect-btn {
+    background: #78350f;
+    border: none;
     border-radius: 6px;
-    color: #fb923c;
+    color: #fed7aa;
     cursor: pointer;
-    padding: 4px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    padding: 5px 12px;
+    font-size: 12px;
+    font-weight: 500;
     flex-shrink: 0;
     transition: all 0.15s;
   }
 
-  .retry-btn:hover {
-    background: #78350f;
-    color: #fed7aa;
+  .reconnect-btn:hover {
+    background: #92400e;
   }
 
   .spinner {

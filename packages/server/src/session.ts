@@ -32,9 +32,9 @@ const CHARSET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
 const SESSION_ID_LENGTH = 4
 const SECRET_LENGTH = 16    // 16 位密钥，用于防止暴力枚举
 
-// 过期时间
-const PENDING_TIMEOUT = 5 * 60 * 1000      // 5 分钟
-const CONNECTED_TIMEOUT = 24 * 60 * 60 * 1000  // 24 小时
+// 过期时间（可通过环境变量配置，单位：秒）
+const PENDING_TIMEOUT = parseInt(process.env.SESSION_PENDING_TTL || '300', 10) * 1000        // 默认 5 分钟
+const CONNECTED_TIMEOUT = parseInt(process.env.SESSION_CONNECTED_TTL || '604800', 10) * 1000 // 默认 7 天
 
 // 容量限制（可通过环境变量配置）
 const MAX_SESSIONS = parseInt(process.env.MAX_SESSIONS || '10000', 10)

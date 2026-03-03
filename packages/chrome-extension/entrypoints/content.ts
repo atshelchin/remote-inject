@@ -60,12 +60,16 @@ export default defineContentScript({
       const data = event.data
       if (!data || data.source !== MSG_SOURCE_INJECTED) return
 
-      // Injected.js signals it's ready — re-send the buffered state
+      // Injected.js signals it's ready — re-send the buffered state + debug mode
       if (data.type === 'ready') {
         injectedReady = true
         if (lastStateUpdate) {
           window.postMessage({ ...lastStateUpdate, source: MSG_SOURCE_CONTENT }, '*')
         }
+        // Replay debug mode setting (initial send may have been lost before injected.js was ready)
+        chrome.storage.local.get('debugMode', (result) => {
+          window.postMessage({ source: MSG_SOURCE_CONTENT, type: 'debug_mode', enabled: !!result.debugMode }, '*')
+        })
         return
       }
 
