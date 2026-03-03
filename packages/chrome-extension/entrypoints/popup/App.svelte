@@ -110,6 +110,7 @@
       <span class="banner-text">Connection lost</span>
       <button class="reconnect-btn" onclick={reconnect}>Reconnect</button>
     </div>
+    <p class="reconnect-hint">Please make sure the bridge page is open on your phone</p>
     {#if debugMode}
       {#if state.sessionUrl}
         <div class="session-hint">
@@ -332,6 +333,12 @@
 
   .reconnect-btn:hover {
     background: #92400e;
+  }
+
+  .reconnect-hint {
+    font-size: 12px;
+    color: #64748b;
+    text-align: center;
   }
 
   .spinner {

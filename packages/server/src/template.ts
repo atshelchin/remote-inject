@@ -114,6 +114,7 @@ const translations: Record<string, Record<string, string>> = {
     'bridge.safeWalletOpenInApps': '请确保在 Safe 钱包的 Apps 中打开此页面',
     'bridge.reconnecting': '重新连接中... ({attempt}/{maxAttempts})',
     'bridge.networkDisconnected': '网络连接断开，正在尝试重连',
+    'bridge.peerReconnecting': '应用连接已断开，等待重新连接...',
     'landing.safeDetected': '检测到 Safe 钱包，正在连接...',
 
     // Methods
@@ -214,6 +215,7 @@ const translations: Record<string, Record<string, string>> = {
     'bridge.safeWalletOpenInApps': 'Please make sure to open this page in Safe Wallet Apps',
     'bridge.reconnecting': 'Reconnecting... ({attempt}/{maxAttempts})',
     'bridge.networkDisconnected': 'Network disconnected, trying to reconnect',
+    'bridge.peerReconnecting': 'App connection lost, waiting to reconnect...',
     'landing.safeDetected': 'Safe Wallet detected, connecting...',
 
     // Methods

@@ -232,7 +232,8 @@ export class RemoteProvider {
 
         case 'disconnect':
           this._connected = false
-          this._accounts = []
+          // 不清除 accounts/chainId — session 仍然有效，peer 可能重连
+          // 保留缓存状态让 DApp 继续显示已连接信息
           // peer断开，标记为非用户主动，允许后续重连
           this.emit('disconnect', { code: 4900, message: message.reason || 'Peer disconnected', userInitiated: false } as DisconnectInfo)
           break

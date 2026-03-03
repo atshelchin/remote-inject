@@ -680,8 +680,15 @@
               break
 
             case 'disconnect':
-              userInitiatedDisconnect = true  // DApp initiated disconnect
-              showError(t('bridge.disconnected'), t('bridge.peerDisconnected'))
+              if (message.reason === 'User initiated') {
+                // DApp user explicitly clicked Disconnect — permanent
+                userInitiatedDisconnect = true
+                showError(t('bridge.disconnected'), t('bridge.peerDisconnected'))
+              } else {
+                // DApp's WebSocket dropped — stay connected, wait for DApp to reconnect
+                console.log('[Bridge] DApp connection dropped, waiting for reconnection...')
+                updateStatus('loading', t('bridge.peerReconnecting'), '')
+              }
               break
 
             case 'dapp_reconnected':
@@ -877,6 +884,25 @@
         }
       }
     }
+
+    // Reconnect when phone wakes up (screen unlock) or network comes back
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible' && !userInitiatedDisconnect && ws) {
+        if (ws.readyState !== WebSocket.OPEN) {
+          console.log('[Bridge] Page visible again, reconnecting...')
+          reconnectAttempts = 0  // Fresh start
+          connectWebSocket()
+        }
+      }
+    })
+
+    window.addEventListener('online', () => {
+      if (!userInitiatedDisconnect && ws && ws.readyState !== WebSocket.OPEN) {
+        console.log('[Bridge] Network back online, reconnecting...')
+        reconnectAttempts = 0
+        connectWebSocket()
+      }
+    })
 
     // Start
     init()
