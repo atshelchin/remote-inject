@@ -3,6 +3,18 @@ import type { BackgroundToOffscreenMessage, OffscreenProviderState } from '../..
 
 const provider = new RemoteProvider()
 
+// ------- Connection state -------
+
+let userDisconnected = false
+
+// Session data for on-demand reconnection
+let lastServerUrl = ''
+let lastSessionId = ''
+let lastSessionUrl = ''
+
+// Shared reconnection promise — multiple requests wait on the same attempt
+let reconnectPromise: Promise<boolean> | null = null
+
 // ------- Send helpers -------
 
 function sendToBackground(msg: Record<string, unknown>) {
@@ -20,6 +32,69 @@ function broadcastState() {
   sendToBackground({ type: 'state_update', state })
 }
 
+// ------- On-demand reconnection -------
+
+function ensureConnected(): Promise<boolean> {
+  if (provider.isConnected) return Promise.resolve(true)
+  if (userDisconnected || !lastServerUrl || !lastSessionId) return Promise.resolve(false)
+
+  // If already reconnecting, share the same promise — don't pile up attempts
+  if (reconnectPromise) return reconnectPromise
+
+  reconnectPromise = doReconnect().finally(() => {
+    reconnectPromise = null
+  })
+  return reconnectPromise
+}
+
+async function doReconnect(): Promise<boolean> {
+  sendToBackground({
+    type: 'state_update',
+    state: {
+      status: 'reconnecting',
+      sessionId: lastSessionId,
+      sessionUrl: lastSessionUrl,
+    } as OffscreenProviderState,
+  })
+
+  try {
+    await provider.resumeSession({
+      serverUrl: lastServerUrl,
+      sessionId: lastSessionId,
+      sessionUrl: lastSessionUrl,
+    })
+
+    broadcastState()
+    return provider.isConnected
+  } catch (err: any) {
+    console.log('[offscreen] On-demand reconnect failed:', err.message)
+
+    // Session expired — try creating new session
+    if (err.message?.includes('Session not found') || err.message?.includes('expired')) {
+      try {
+        const result = await provider.connect(lastServerUrl, {
+          name: 'Remote Inject Bridge',
+          url: 'chrome-extension://' + chrome.runtime.id,
+        })
+        lastSessionId = result.sessionId
+        lastSessionUrl = result.url.startsWith('http') ? result.url : `${lastServerUrl}${result.url}`
+
+        sendToBackground({
+          type: 'state_update',
+          state: {
+            status: 'waiting',
+            sessionId: lastSessionId,
+            sessionUrl: lastSessionUrl,
+          } as OffscreenProviderState,
+        })
+      } catch {
+        // Total failure
+      }
+    }
+    return false
+  }
+}
+
 // ------- Provider event forwarding -------
 
 provider.on('connect', (info) => {
@@ -27,9 +102,24 @@ provider.on('connect', (info) => {
   broadcastState()
 })
 
-provider.on('disconnect', (info) => {
+provider.on('disconnect', (info: any) => {
   sendToBackground({ type: 'event', event: 'disconnect', data: info })
-  broadcastState()
+
+  if (userDisconnected || info?.userInitiated) {
+    broadcastState()
+    return
+  }
+
+  // Don't eagerly reconnect — tell background we're in "stale" state
+  // but keep session data so we can reconnect on-demand when a request arrives
+  sendToBackground({
+    type: 'state_update',
+    state: {
+      status: 'reconnecting',
+      sessionId: lastSessionId,
+      sessionUrl: lastSessionUrl,
+    } as OffscreenProviderState,
+  })
 })
 
 provider.on('chainChanged', (chainId) => {
@@ -53,16 +143,23 @@ chrome.runtime.onMessage.addListener((msg: BackgroundToOffscreenMessage, _sender
 
   switch (msg.type) {
     case 'connect':
+      userDisconnected = false
       handleConnect(msg.serverUrl)
       break
     case 'disconnect':
+      userDisconnected = true
+      reconnectPromise = null
       provider.disconnect()
+      lastServerUrl = ''
+      lastSessionId = ''
+      lastSessionUrl = ''
       broadcastState()
       break
     case 'request':
       handleRequest(msg.requestId, msg.method, msg.params)
       break
     case 'resume':
+      userDisconnected = false
       handleResume(msg.serverUrl, msg.sessionId, msg.sessionUrl)
       break
   }
@@ -85,6 +182,11 @@ async function handleConnect(serverUrl: string) {
       ? result.url
       : `${serverUrl}${result.url}`
 
+    // Save for on-demand reconnection
+    lastServerUrl = serverUrl
+    lastSessionId = result.sessionId
+    lastSessionUrl = sessionUrl
+
     const state: OffscreenProviderState = {
       status: 'waiting',
       sessionId: result.sessionId,
@@ -100,6 +202,11 @@ async function handleConnect(serverUrl: string) {
 }
 
 async function handleResume(serverUrl: string, sessionId: string, sessionUrl: string) {
+  // Save for on-demand reconnection
+  lastServerUrl = serverUrl
+  lastSessionId = sessionId
+  lastSessionUrl = sessionUrl
+
   try {
     sendToBackground({
       type: 'state_update',
@@ -108,28 +215,52 @@ async function handleResume(serverUrl: string, sessionId: string, sessionUrl: st
 
     await provider.resumeSession({ serverUrl, sessionId, sessionUrl })
 
-    // After resume, check if we're already connected (mobile was still connected)
     if (provider.isConnected) {
       broadcastState()
     } else {
-      // Session exists but mobile not yet connected — waiting for scan
+      // Resume means user already scanned QR before — show reconnecting, not waiting
       sendToBackground({
         type: 'state_update',
-        state: { status: 'waiting', sessionId, sessionUrl } as OffscreenProviderState,
+        state: { status: 'reconnecting', sessionId, sessionUrl } as OffscreenProviderState,
       })
     }
   } catch (err: any) {
-    // Session expired or invalid — fall back to creating a new session
-    console.log('[offscreen] Resume failed, creating new session:', err.message)
-    await handleConnect(serverUrl)
+    // Session expired or network error — don't create new session eagerly.
+    // Stay in reconnecting state, preserving last known account.
+    // New session will be created on-demand when a request arrives.
+    console.log('[offscreen] Resume failed:', err.message)
+    sendToBackground({
+      type: 'state_update',
+      state: { status: 'reconnecting', sessionId, sessionUrl } as OffscreenProviderState,
+    })
   }
 }
 
 async function handleRequest(requestId: string, method: string, params?: unknown) {
+  console.log(`[offscreen] request: ${method}`, { connected: provider.isConnected, userDisconnected, lastSessionId: !!lastSessionId, reconnecting: !!reconnectPromise })
+
+  // Try to reconnect on-demand if WebSocket is down
+  if (!provider.isConnected) {
+    const reconnected = await ensureConnected()
+    if (!reconnected) {
+      console.warn(`[offscreen] ${method} rejected: not connected, reconnect failed`)
+      sendToBackground({
+        type: 'response',
+        requestId,
+        error: { code: -32002, message: 'Wallet not connected. Please reconnect.' },
+      })
+      return
+    }
+    console.log(`[offscreen] ${method}: reconnected successfully`)
+  }
+
   try {
+    console.log(`[offscreen] ${method}: forwarding to SDK...`)
     const result = await provider.request({ method, params: params as any })
+    console.log(`[offscreen] ${method} → result:`, result)
     sendToBackground({ type: 'response', requestId, result })
   } catch (err: any) {
+    console.warn(`[offscreen] ${method} → error:`, err.code, err.message)
     sendToBackground({
       type: 'response',
       requestId,

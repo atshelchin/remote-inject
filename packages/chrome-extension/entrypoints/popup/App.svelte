@@ -50,8 +50,8 @@
   <header>
     <img src="/assets/icon.svg" alt="logo" class="logo" />
     <h1>Remote Inject</h1>
-    <span class="badge" class:connected={state.status === 'connected'} class:waiting={state.status === 'waiting' || state.status === 'connecting'}>
-      {state.status === 'connected' ? 'Connected' : state.status === 'waiting' ? 'Waiting' : state.status === 'connecting' ? 'Connecting' : 'Disconnected'}
+    <span class="badge" class:connected={state.status === 'connected'} class:waiting={state.status === 'waiting' || state.status === 'connecting'} class:reconnecting={state.status === 'reconnecting'}>
+      {state.status === 'connected' ? 'Connected' : state.status === 'waiting' ? 'Waiting' : state.status === 'connecting' ? 'Connecting' : state.status === 'reconnecting' ? 'Reconnecting' : 'Disconnected'}
     </span>
   </header>
 
@@ -82,6 +82,22 @@
       {/if}
       <button class="btn secondary" onclick={disconnect}>Cancel</button>
     </div>
+  {:else if state.status === 'reconnecting'}
+    {#if state.account}
+      <ConnectedView account={state.account} chainId={state.chainId ?? '0x1'} />
+    {/if}
+    <div class="reconnecting-banner">
+      <div class="spinner small"></div>
+      <span>Connection lost, reconnecting automatically...</span>
+    </div>
+    {#if state.sessionUrl}
+      <div class="session-hint">
+        <p>You can also open this link in your mobile wallet to reconnect faster:</p>
+        <code class="session-url">{state.sessionUrl}</code>
+      </div>
+    {/if}
+    <RequestLog requests={state.requests} />
+    <button class="btn danger" onclick={disconnect}>Disconnect</button>
   {:else if state.status === 'connected'}
     <ConnectedView account={state.account ?? ''} chainId={state.chainId ?? '0x1'} />
     {#if state.sessionUrl}
@@ -152,6 +168,11 @@
   .badge.waiting {
     background: #78350f;
     color: #fbbf24;
+  }
+
+  .badge.reconnecting {
+    background: #78350f;
+    color: #fb923c;
   }
 
   .error {
@@ -232,6 +253,18 @@
     user-select: all;
   }
 
+  .reconnecting-banner {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: #1c1917;
+    border: 1px solid #78350f;
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 13px;
+    color: #fb923c;
+  }
+
   .spinner {
     width: 32px;
     height: 32px;
@@ -239,6 +272,13 @@
     border-top-color: #3b82f6;
     border-radius: 50%;
     animation: spin 0.8s linear infinite;
+  }
+
+  .spinner.small {
+    width: 16px;
+    height: 16px;
+    border-width: 2px;
+    flex-shrink: 0;
   }
 
   @keyframes spin {

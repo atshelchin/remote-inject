@@ -2,7 +2,7 @@
 // Extension State
 // ============================================================
 
-export type ConnectionStatus = 'disconnected' | 'connecting' | 'waiting' | 'connected'
+export type ConnectionStatus = 'disconnected' | 'connecting' | 'waiting' | 'connected' | 'reconnecting'
 
 export interface ExtensionState {
   serverUrl: string

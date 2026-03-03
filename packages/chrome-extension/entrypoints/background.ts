@@ -1,5 +1,5 @@
 import { PORT_NAME_CONTENT } from '../lib/constants'
-import { getState, updateState, addRequestLog, updateRequestLog } from '../lib/storage'
+import { getState, updateState, clearStateKeys, addRequestLog, updateRequestLog } from '../lib/storage'
 import type {
   ContentToBackgroundMessage,
   BackgroundToContentMessage,
@@ -54,26 +54,35 @@ export default defineBackground(() => {
 
   async function handleOffscreenStateUpdate(providerState: OffscreenProviderState) {
     const current = await getState()
-    const isDisconnecting = providerState.status === 'disconnected'
+    const isReconnecting = providerState.status === 'reconnecting'
+    const isDisconnected = providerState.status === 'disconnected'
 
+    // Preserve account/chainId during reconnecting; clear on full disconnect
     const updated = await updateState({
       status: providerState.status,
-      sessionId: providerState.sessionId ?? current.sessionId,
-      sessionUrl: providerState.sessionUrl ?? current.sessionUrl,
-      account: isDisconnecting ? undefined : (providerState.account ?? current.account),
-      chainId: isDisconnecting ? undefined : (providerState.chainId ?? current.chainId),
+      sessionId: providerState.sessionId,
+      sessionUrl: providerState.sessionUrl,
+      account: isDisconnected ? undefined : (providerState.account ?? current.account),
+      chainId: isDisconnected ? undefined : (providerState.chainId ?? current.chainId),
       error: providerState.error,
-      // Keep sessionId and sessionUrl even on disconnect for reconnection
     })
+
+    // updateState ignores undefined, so explicitly clear on disconnect
+    if (isDisconnected) {
+      await clearStateKeys(['account', 'chainId', 'sessionId', 'sessionUrl', 'error'])
+    }
+
+    const finalState = isDisconnected ? await getState() : updated
 
     updateBadge(providerState.status === 'connected')
 
-    // Always broadcast state changes to all tabs
+    // DApps see cached state during reconnecting (accounts/chainId remain valid)
+    const dappConnected = providerState.status === 'connected' || (isReconnecting && !!finalState.account)
     broadcastToTabs({
       type: 'state_update',
-      accounts: updated.account ? [updated.account] : [],
-      chainId: updated.chainId ?? '0x1',
-      connected: providerState.status === 'connected',
+      accounts: finalState.account ? [finalState.account] : [],
+      chainId: finalState.chainId ?? '0x1',
+      connected: dappConnected,
     })
   }
 
@@ -88,17 +97,20 @@ export default defineBackground(() => {
     tabPorts.set(tabId, port)
 
     // Send current state to newly connected tab
+    // During reconnecting, DApps still see cached accounts (WS will reconnect on-demand)
     getState().then((state) => {
+      const dappConnected = (state.status === 'connected' || state.status === 'reconnecting') && !!state.account
       port.postMessage({
         type: 'state_update',
         accounts: state.account ? [state.account] : [],
         chainId: state.chainId ?? '0x1',
-        connected: state.status === 'connected',
+        connected: dappConnected,
       } satisfies BackgroundToContentMessage)
     })
 
     port.onMessage.addListener(async (msg: ContentToBackgroundMessage) => {
       if (msg.type === 'rpc_request') {
+        console.log(`[background] rpc_request: ${msg.method} from tab ${tabId}`)
         requestOrigins.set(msg.requestId, tabId)
 
         await addRequestLog({
@@ -138,6 +150,8 @@ export default defineBackground(() => {
           const tabId = requestOrigins.get(offMsg.requestId)
           requestOrigins.delete(offMsg.requestId)
 
+          console.log(`[background] response for ${offMsg.requestId} → tab ${tabId}`, offMsg.error ? `error: ${offMsg.error.message}` : 'ok')
+
           updateRequestLog(offMsg.requestId, {
             status: offMsg.error ? 'failed' : 'completed',
             error: offMsg.error?.message,
@@ -175,18 +189,11 @@ export default defineBackground(() => {
       }
 
       case 'popup_disconnect':
+        // Tell offscreen to disconnect first — its state_update will clear storage via handleOffscreenStateUpdate
         ensureOffscreen().then(() => {
           sendToOffscreen({ type: 'disconnect' })
         })
-        // Clear session data so next connect creates a fresh session
-        updateState({
-          status: 'disconnected',
-          sessionId: undefined,
-          sessionUrl: undefined,
-          account: undefined,
-          chainId: undefined,
-          error: undefined,
-        })
+        updateBadge(false)
         return
 
       case 'popup_get_state':
@@ -225,7 +232,11 @@ export default defineBackground(() => {
 
   async function tryResumeSession() {
     const state = await getState()
-    if ((state.status === 'connected' || state.status === 'waiting') && state.sessionId && state.serverUrl) {
+    if (
+      (state.status === 'connected' || state.status === 'waiting' || state.status === 'reconnecting') &&
+      state.sessionId &&
+      state.serverUrl
+    ) {
       await ensureOffscreen()
       sendToOffscreen({
         type: 'resume',

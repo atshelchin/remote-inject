@@ -20,9 +20,23 @@ export async function saveState(state: ExtensionState): Promise<void> {
 
 export async function updateState(patch: Partial<ExtensionState>): Promise<ExtensionState> {
   const state = await getState()
-  const updated = { ...state, ...patch }
+  // Only overwrite with non-undefined values; use deleteStateKeys() to explicitly clear fields
+  const filtered: Record<string, unknown> = {}
+  for (const [k, v] of Object.entries(patch)) {
+    if (v !== undefined) filtered[k] = v
+  }
+  const updated = { ...state, ...filtered }
   await saveState(updated)
   return updated
+}
+
+export async function clearStateKeys(keys: (keyof ExtensionState)[]): Promise<ExtensionState> {
+  const state = await getState()
+  for (const k of keys) {
+    delete (state as any)[k]
+  }
+  await saveState(state)
+  return state
 }
 
 export async function addRequestLog(entry: RequestLogEntry): Promise<void> {

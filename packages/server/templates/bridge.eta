@@ -753,19 +753,46 @@
       }
     }
 
+    // Methods that require user confirmation in wallet (signing, transactions, chain mgmt)
+    const SIGNING_METHODS = new Set([
+      'personal_sign',
+      'eth_sign',
+      'eth_signTypedData',
+      'eth_signTypedData_v3',
+      'eth_signTypedData_v4',
+      'eth_sendTransaction',
+      'eth_sendRawTransaction',
+      'wallet_switchEthereumChain',
+      'wallet_addEthereumChain',
+      'wallet_watchAsset',
+      'wallet_sendCalls',
+      'eth_requestAccounts',
+      'wallet_requestPermissions',
+    ])
+
     // Handle RPC request
     async function handleRequest(message) {
       const { id, method, params } = message
+      const needsConfirmation = SIGNING_METHODS.has(method)
 
-      const methodName = I18N['method.' + method] || method
-      updateStatus('pending', t('bridge.confirmInWallet'), t('bridge.requestingAction'), true)
-      document.getElementById('requestType').textContent = methodName
-      pendingRequestCount++
+      if (needsConfirmation) {
+        console.log('[Bridge] Signing request:', method, params)
+        const methodName = I18N['method.' + method] || method
+        updateStatus('pending', t('bridge.confirmInWallet'), t('bridge.requestingAction'), true)
+        document.getElementById('requestType').textContent = methodName
+        pendingRequestCount++
+      }
 
       try {
         const result = await selectedProvider.request({ method, params })
+        if (!needsConfirmation) {
+          console.log('[Bridge]', method, '→ ok')
+        } else {
+          console.log('[Bridge]', method, '→', result)
+        }
         ws.send(JSON.stringify({ type: 'response', id, result }))
       } catch (error) {
+        console.warn('[Bridge]', method, '→ error:', error.code, error.message)
         ws.send(JSON.stringify({
           type: 'response',
           id,
@@ -773,10 +800,11 @@
         }))
       }
 
-      pendingRequestCount--
-
-      if (pendingRequestCount === 0) {
-        updateStatus('connected', t('bridge.connected'), t('bridge.waitingRequest'))
+      if (needsConfirmation) {
+        pendingRequestCount--
+        if (pendingRequestCount === 0) {
+          updateStatus('connected', t('bridge.connected'), t('bridge.waitingRequest'))
+        }
       }
     }
 

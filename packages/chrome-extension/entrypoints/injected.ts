@@ -13,6 +13,31 @@ export default defineUnlistedScript(() => {
   let currentChainId = '0x1'
   let isConnected = false
 
+  // ---- State readiness (wait for first state_update from extension) ----
+  let stateReady = false
+  let stateReadyCallbacks: (() => void)[] = []
+
+  function waitForState(): Promise<void> {
+    if (stateReady) return Promise.resolve()
+    return new Promise((resolve) => {
+      stateReadyCallbacks.push(resolve)
+    })
+  }
+
+  function markStateReady() {
+    if (stateReady) return
+    stateReady = true
+    stateReadyCallbacks.forEach((fn) => fn())
+    stateReadyCallbacks = []
+  }
+
+  // If state_update never arrives (extension not installed / broken), unblock after 2s
+  setTimeout(markStateReady, 2000)
+
+  // ---- Capability cache ----
+  let cachedCapabilities: unknown = undefined
+  let capabilitiesQueried = false
+
   // ---- Pending requests ----
   const pendingRequests = new Map<
     string,
@@ -81,48 +106,79 @@ export default defineUnlistedScript(() => {
     request(args: { method: string; params?: unknown }): Promise<unknown> {
       const { method, params } = args
 
+      const result = provider._handleRequest(method, params)
+      result.then(
+        (res) => console.log(`[RemoteInject] ${method} →`, res),
+        (err) => console.warn(`[RemoteInject] ${method} ✗`, err),
+      )
+      return result
+    },
+
+    _handleRequest(method: string, params?: unknown): Promise<unknown> {
       switch (method) {
-        // ---- Locally handled: state reads ----
+        // ---- Locally handled: state reads (wait for initial state) ----
         case 'eth_accounts':
-          return Promise.resolve([...currentAccounts])
+          return waitForState().then(() => [...currentAccounts])
 
         case 'eth_chainId':
-          return Promise.resolve(currentChainId)
+          return waitForState().then(() => currentChainId)
 
         case 'net_version':
-          return Promise.resolve(String(parseInt(currentChainId, 16)))
+          return waitForState().then(() => String(parseInt(currentChainId, 16)))
 
         case 'eth_coinbase':
-          return Promise.resolve(currentAccounts[0] ?? null)
+          return waitForState().then(() => currentAccounts[0] ?? null)
 
         case 'web3_clientVersion':
           return Promise.resolve('RemoteInjectBridge/0.1.0')
 
         // ---- Locally handled: permissions (Uniswap calls these) ----
         case 'wallet_getPermissions':
-          return Promise.resolve(
+          return waitForState().then(() =>
             isConnected
               ? [{ parentCapability: 'eth_accounts', caveats: [{ type: 'restrictReturnedAccounts', value: currentAccounts }] }]
               : [],
           )
 
         case 'wallet_requestPermissions': {
-          if (isConnected && currentAccounts.length > 0) {
+          // Return cached permissions if we have accounts (even during reconnecting)
+          if (currentAccounts.length > 0) {
             return Promise.resolve([
               { parentCapability: 'eth_accounts', caveats: [{ type: 'restrictReturnedAccounts', value: currentAccounts }] },
             ])
           }
-          // Fall through to remote if not connected
-          return forwardRequest(method, params)
+          // Wait for state first — accounts might be on the way
+          return waitForState().then(() => {
+            if (currentAccounts.length > 0) {
+              return [{ parentCapability: 'eth_accounts', caveats: [{ type: 'restrictReturnedAccounts', value: currentAccounts }] }]
+            }
+            // Truly no accounts — forward to wallet for initial connection
+            return forwardRequest(method, params)
+          })
         }
+
+        // ---- EIP-5792: try wallet first, cache result ----
+        case 'wallet_getCapabilities':
+          if (capabilitiesQueried) return Promise.resolve(cachedCapabilities)
+          return forwardRequest(method, params)
+            .then((res) => { cachedCapabilities = res; capabilitiesQueried = true; return res })
+            .catch(() => { cachedCapabilities = {}; capabilitiesQueried = true; return {} })
+
+        case 'wallet_getCallsStatus':
+        case 'wallet_sendCalls':
+        case 'wallet_showCallsStatus':
+          return forwardRequest(method, params)
 
         // ---- Connection request ----
         case 'eth_requestAccounts': {
-          if (isConnected && currentAccounts.length > 0) {
-            return Promise.resolve([...currentAccounts])
-          }
-          // Fall through to remote — SDK will wait for mobile to connect
-          return forwardRequest(method, params)
+          // Wait for state first — may already be connected
+          return waitForState().then(() => {
+            if (isConnected && currentAccounts.length > 0) {
+              return [...currentAccounts]
+            }
+            // Not connected — forward to wallet for initial connection
+            return forwardRequest(method, params)
+          })
         }
 
         // ---- Methods that MUST go to mobile (signing, chain management) ----
@@ -138,7 +194,7 @@ export default defineUnlistedScript(() => {
         case 'wallet_watchAsset':
           return forwardRequest(method, params)
 
-        // ---- All other methods: forward to mobile (eth_call, eth_getBalance, etc.) ----
+        // ---- All other methods: forward to wallet ----
         default:
           return forwardRequest(method, params)
       }
@@ -255,12 +311,17 @@ export default defineUnlistedScript(() => {
         } else if (wasConnected && !isConnected) {
           emit('disconnect', { code: 4900, message: 'Disconnected' })
         }
+
+        // Mark state as ready so waiting requests can resolve
+        markStateReady()
+        // Announce provider after first state_update so DApps see correct accounts
+        activateProvider()
         break
       }
     }
   })
 
-  // ---- EIP-6963 ----
+  // ---- EIP-6963 (deferred until state is ready) ----
 
   const ICON_SVG = `data:image/svg+xml;base64,${btoa('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none"><rect width="128" height="128" rx="24" fill="#3b82f6"/><path d="M40 48h48M40 64h48M40 80h32" stroke="#fff" stroke-width="8" stroke-linecap="round"/><circle cx="88" cy="80" r="16" fill="#22c55e"/><path d="M82 80l4 4 8-8" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>')}`
 
@@ -279,15 +340,29 @@ export default defineUnlistedScript(() => {
     )
   }
 
-  announceProvider()
-  window.addEventListener('eip6963:requestProvider', announceProvider)
+  // Delay provider activation until we have state from the extension.
+  // This prevents DApps (like Uniswap) from calling eth_accounts before
+  // the cached account data arrives, which would return [] and crash them.
+  let providerActivated = false
 
-  // ---- window.ethereum fallback for legacy DApps ----
-  if (typeof (window as any).ethereum === 'undefined') {
-    Object.defineProperty(window, 'ethereum', {
-      value: provider,
-      writable: true,
-      configurable: true,
-    })
+  function activateProvider() {
+    if (providerActivated) return
+    providerActivated = true
+
+    announceProvider()
+    window.addEventListener('eip6963:requestProvider', announceProvider)
+
+    // window.ethereum fallback for legacy DApps
+    if (typeof (window as any).ethereum === 'undefined') {
+      Object.defineProperty(window, 'ethereum', {
+        value: provider,
+        writable: true,
+        configurable: true,
+      })
+    }
   }
+
+  // Fallback: if state_update doesn't arrive within 500ms, activate anyway
+  // (e.g., extension is disconnected and has no state to send)
+  setTimeout(activateProvider, 500)
 })
