@@ -222,7 +222,15 @@ async function handleConnect(serverUrl: string) {
   }
 }
 
+let resumeInProgress = false
+
 async function handleResume(serverUrl: string, sessionId: string, sessionUrl: string) {
+  if (resumeInProgress) {
+    console.log('[offscreen] Resume already in progress, skipping')
+    return
+  }
+  resumeInProgress = true
+
   // Save for on-demand reconnection
   lastServerUrl = serverUrl
   lastSessionId = sessionId
@@ -265,6 +273,8 @@ async function handleResume(serverUrl: string, sessionId: string, sessionUrl: st
       type: 'state_update',
       state: { status: 'reconnecting', sessionId, sessionUrl } as OffscreenProviderState,
     })
+  } finally {
+    resumeInProgress = false
   }
 }
 

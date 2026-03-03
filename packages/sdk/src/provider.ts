@@ -115,6 +115,10 @@ export class RemoteProvider {
    * @param sessionData - 之前保存的session数据
    */
   async resumeSession(sessionData: { serverUrl: string; sessionId: string; sessionUrl: string }): Promise<void> {
+    // Clean up any existing connection to prevent old onclose handlers
+    // from interfering with the new WebSocket
+    this.cleanupConnection()
+
     this.serverUrl = sessionData.serverUrl.replace(/\/$/, '')
     this.sessionId = sessionData.sessionId
     this.sessionUrl = sessionData.sessionUrl
@@ -129,6 +133,27 @@ export class RemoteProvider {
 
     // 连接 WebSocket
     await this.connectWebSocket()
+  }
+
+  /**
+   * Clean up existing WebSocket and reconnect timer without triggering events
+   */
+  private cleanupConnection(): void {
+    if (this._reconnectTimer) {
+      clearTimeout(this._reconnectTimer)
+      this._reconnectTimer = null
+    }
+    if (this.ws) {
+      // Remove handlers to prevent old onclose from starting a reconnect loop
+      this.ws.onclose = null
+      this.ws.onmessage = null
+      this.ws.onerror = null
+      this.ws.onopen = null
+      if (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING) {
+        this.ws.close()
+      }
+      this.ws = null
+    }
   }
 
   /**

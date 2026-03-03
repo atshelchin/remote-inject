@@ -15,6 +15,7 @@
 
   let error = $state('')
   let debugMode = $state(false)
+  let reconnectPending = $state(false)
 
   onMount(() => {
     chrome.runtime.sendMessage({ type: 'popup_get_state' }, (response) => {
@@ -37,6 +38,10 @@
         if (newState.error) {
           error = newState.error
         }
+        // Clear reconnect pending when status changes from reconnecting
+        if (newState.status !== 'reconnecting') {
+          reconnectPending = false
+        }
       }
     })
   })
@@ -51,7 +56,11 @@
   }
 
   function reconnect() {
+    if (reconnectPending) return
+    reconnectPending = true
     chrome.runtime.sendMessage({ type: 'popup_reconnect' })
+    // Auto-reset after timeout in case state_update never arrives
+    setTimeout(() => { reconnectPending = false }, 10000)
   }
 
   function toggleDebug() {
@@ -109,7 +118,14 @@
     {/if}
     <div class="reconnecting-banner">
       <span class="banner-text">Connection lost</span>
-      <button class="reconnect-btn" onclick={reconnect}>Reconnect</button>
+      <button class="reconnect-btn" onclick={reconnect} disabled={reconnectPending}>
+        {#if reconnectPending}
+          <div class="spinner small"></div>
+          Reconnecting...
+        {:else}
+          Reconnect
+        {/if}
+      </button>
     </div>
     <p class="reconnect-hint">Please make sure the bridge page is open on your phone</p>
     {#if debugMode}
@@ -332,8 +348,13 @@
     transition: all 0.15s;
   }
 
-  .reconnect-btn:hover {
+  .reconnect-btn:hover:not(:disabled) {
     background: #92400e;
+  }
+
+  .reconnect-btn:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
   }
 
   .reconnect-hint {

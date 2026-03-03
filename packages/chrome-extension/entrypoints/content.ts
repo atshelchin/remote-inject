@@ -33,9 +33,17 @@ export default defineContentScript({
       })
 
       p.onDisconnect.addListener(() => {
+        // Extension context invalidated (extension reloaded/updated) — stop retrying
+        if (!chrome.runtime?.id) return
+
         // Service worker restarted; reconnect after a short delay
         setTimeout(() => {
-          port = connectPort()
+          if (!chrome.runtime?.id) return
+          try {
+            port = connectPort()
+          } catch {
+            // Context invalidated between check and connect — give up
+          }
         }, 500)
       })
 
