@@ -47,3 +47,5 @@ package-lock.json
 .turbo
 node_modules
 test-results
+.output
+.wxt

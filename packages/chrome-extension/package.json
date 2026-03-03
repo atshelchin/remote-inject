@@ -1,0 +1,24 @@
+{
+  "name": "@shelchin/remote-inject-chrome-extension",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wxt",
+    "build": "wxt build",
+    "zip": "wxt zip",
+    "clean": "rm -rf .output .wxt dist"
+  },
+  "dependencies": {
+    "@shelchin/remote-inject-sdk": "workspace:*",
+    "qrcode": "^1.5.4"
+  },
+  "devDependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
+    "@types/qrcode": "^1.5.5",
+    "@wxt-dev/module-svelte": "^2.0.0",
+    "svelte": "^5.0.0",
+    "typescript": "^5.0.0",
+    "wxt": "^0.20.0"
+  }
+}
