@@ -16,15 +16,22 @@
   let error = $state('')
 
   onMount(() => {
-    // Load initial state
     chrome.runtime.sendMessage({ type: 'popup_get_state' }, (response) => {
-      if (response?.state) state = response.state
+      if (response?.state) {
+        state = response.state
+        if (response.state.error) {
+          error = response.state.error
+        }
+      }
     })
 
-    // Listen for storage changes
     chrome.storage.onChanged.addListener((changes) => {
       if (changes.extensionState?.newValue) {
-        state = changes.extensionState.newValue
+        const newState = changes.extensionState.newValue
+        state = newState
+        if (newState.error) {
+          error = newState.error
+        }
       }
     })
   })
@@ -53,6 +60,14 @@
   {/if}
 
   {#if state.status === 'disconnected'}
+    <div class="guide">
+      <p class="guide-title">Bridge any DApp to your mobile wallet</p>
+      <ol>
+        <li>Enter your Remote Inject server URL below</li>
+        <li>Click Connect and scan the QR code with your mobile wallet</li>
+        <li>Open any DApp — it will detect "Remote Inject Bridge" as a wallet</li>
+      </ol>
+    </div>
     <ServerConfig serverUrl={state.serverUrl} onConnect={connect} />
   {:else if state.status === 'connecting'}
     <div class="center">
@@ -61,7 +76,7 @@
     </div>
   {:else if state.status === 'waiting'}
     <div class="qr-section">
-      <p class="hint">Scan with your mobile wallet</p>
+      <p class="hint">Scan with your mobile wallet's DApp browser, or paste the link into it</p>
       {#if state.sessionUrl}
         <QRCode url={state.sessionUrl} />
       {/if}
@@ -69,6 +84,12 @@
     </div>
   {:else if state.status === 'connected'}
     <ConnectedView account={state.account ?? ''} chainId={state.chainId ?? '0x1'} />
+    {#if state.sessionUrl}
+      <div class="session-hint">
+        <p>Wallet disconnected? Open the same link in your mobile wallet to reconnect:</p>
+        <code class="session-url">{state.sessionUrl}</code>
+      </div>
+    {/if}
     <RequestLog requests={state.requests} />
     <button class="btn danger" onclick={disconnect}>Disconnect</button>
   {/if}
@@ -141,6 +162,32 @@
     font-size: 13px;
   }
 
+  .guide {
+    background: #1e293b;
+    border-radius: 10px;
+    padding: 14px;
+  }
+
+  .guide-title {
+    font-size: 14px;
+    font-weight: 500;
+    color: #e2e8f0;
+    margin-bottom: 10px;
+  }
+
+  .guide ol {
+    padding-left: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .guide li {
+    font-size: 13px;
+    color: #94a3b8;
+    line-height: 1.4;
+  }
+
   .center {
     display: flex;
     flex-direction: column;
@@ -160,6 +207,29 @@
     font-size: 13px;
     color: #94a3b8;
     text-align: center;
+  }
+
+  .session-hint {
+    background: #1e293b;
+    border-radius: 8px;
+    padding: 10px 12px;
+  }
+
+  .session-hint p {
+    font-size: 12px;
+    color: #64748b;
+    margin-bottom: 6px;
+  }
+
+  .session-url {
+    font-size: 11px;
+    color: #94a3b8;
+    word-break: break-all;
+    display: block;
+    background: #0f172a;
+    padding: 6px 8px;
+    border-radius: 4px;
+    user-select: all;
   }
 
   .spinner {

@@ -103,16 +103,25 @@ async function handleResume(serverUrl: string, sessionId: string, sessionUrl: st
   try {
     sendToBackground({
       type: 'state_update',
-      state: { status: 'connecting' } as OffscreenProviderState,
+      state: { status: 'connecting', sessionId, sessionUrl } as OffscreenProviderState,
     })
 
     await provider.resumeSession({ serverUrl, sessionId, sessionUrl })
-    broadcastState()
+
+    // After resume, check if we're already connected (mobile was still connected)
+    if (provider.isConnected) {
+      broadcastState()
+    } else {
+      // Session exists but mobile not yet connected — waiting for scan
+      sendToBackground({
+        type: 'state_update',
+        state: { status: 'waiting', sessionId, sessionUrl } as OffscreenProviderState,
+      })
+    }
   } catch (err: any) {
-    sendToBackground({
-      type: 'state_update',
-      state: { status: 'disconnected', error: err.message } as OffscreenProviderState,
-    })
+    // Session expired or invalid — fall back to creating a new session
+    console.log('[offscreen] Resume failed, creating new session:', err.message)
+    await handleConnect(serverUrl)
   }
 }
 

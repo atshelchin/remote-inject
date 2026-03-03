@@ -3,6 +3,11 @@
 
   let url = $state(serverUrl)
 
+  // Sync when prop changes (e.g. after loading saved state from storage)
+  $effect(() => {
+    url = serverUrl
+  })
+
   function handleSubmit(e: Event) {
     e.preventDefault()
     const trimmed = url.trim().replace(/\/+$/, '')

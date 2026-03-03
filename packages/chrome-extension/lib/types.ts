@@ -12,6 +12,7 @@ export interface ExtensionState {
   account?: string
   chainId?: string
   requests: RequestLogEntry[]
+  error?: string
 }
 
 export interface RequestLogEntry {
