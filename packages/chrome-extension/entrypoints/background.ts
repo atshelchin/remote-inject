@@ -197,11 +197,10 @@ export default defineBackground(() => {
         return
 
       case 'popup_reconnect':
-        getState().then(async (st) => {
-          if (!st.serverUrl) return
-          // Force new session — old one is dead if user is manually retrying
-          await clearStateKeys(['sessionId', 'sessionUrl'])
-          handlePopupConnect(st.serverUrl)
+        getState().then((st) => {
+          if (st.serverUrl) {
+            handlePopupConnect(st.serverUrl)
+          }
         })
         return
 

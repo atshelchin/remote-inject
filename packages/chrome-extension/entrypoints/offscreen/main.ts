@@ -249,10 +249,18 @@ async function handleResume(serverUrl: string, sessionId: string, sessionUrl: st
       })
     }
   } catch (err: any) {
-    // Session expired or network error — don't create new session eagerly.
-    // Stay in reconnecting state, preserving last known account.
-    // New session will be created on-demand when a request arrives.
     console.log('[offscreen] Resume failed:', err.message)
+
+    // Session expired on server — fall back to creating a new session
+    if (err.message?.includes('Session not found') || err.message?.includes('expired') || err.message?.includes('404')) {
+      console.log('[offscreen] Session expired, creating new session...')
+      lastSessionId = ''
+      lastSessionUrl = ''
+      await handleConnect(serverUrl)
+      return
+    }
+
+    // Network error or other transient issue — stay in reconnecting
     sendToBackground({
       type: 'state_update',
       state: { status: 'reconnecting', sessionId, sessionUrl } as OffscreenProviderState,

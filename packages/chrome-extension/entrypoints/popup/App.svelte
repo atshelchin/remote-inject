@@ -66,8 +66,9 @@
     <h1>Remote Inject</h1>
     <button class="debug-toggle" class:active={debugMode} onclick={toggleDebug} title="Debug mode">
       <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-        <path d="M8 10a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z" fill="currentColor"/>
-        <path d="M13.36 8.87a5.53 5.53 0 0 0 0-1.74l1.48-1.16a.35.35 0 0 0 .08-.45l-1.4-2.42a.35.35 0 0 0-.43-.15l-1.75.7a5.18 5.18 0 0 0-1.5-.87L9.58.88A.35.35 0 0 0 9.24.6H6.44a.35.35 0 0 0-.35.28l-.26 1.9a5.18 5.18 0 0 0-1.5.87l-1.75-.7a.35.35 0 0 0-.43.15L.75 5.52a.35.35 0 0 0 .08.45L2.3 7.13a5.53 5.53 0 0 0 0 1.74L.84 10.03a.35.35 0 0 0-.08.45l1.4 2.42a.35.35 0 0 0 .43.15l1.75-.7c.46.35.96.64 1.5.87l.26 1.9a.35.35 0 0 0 .35.28h2.8a.35.35 0 0 0 .35-.28l.26-1.9a5.18 5.18 0 0 0 1.5-.87l1.75.7a.35.35 0 0 0 .43-.15l1.4-2.42a.35.35 0 0 0-.08-.45l-1.5-1.16Z" stroke="currentColor" stroke-width="1.2" fill="none"/>
+        <path d="M8 14a4 4 0 0 0 4-4V8a4 4 0 0 0-8 0v2a4 4 0 0 0 4 4Z" stroke="currentColor" stroke-width="1.3" fill="none"/>
+        <path d="M5.5 8.5h5M5.5 11h5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+        <path d="M8 4V2M5 5L3 3.5M11 5l2-1.5M4 8H1.5M12 8h2.5M4 12l-2 1.5M12 12l2 1.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
       </svg>
     </button>
     <span class="badge" class:connected={state.status === 'connected'} class:waiting={state.status === 'waiting' || state.status === 'connecting'} class:reconnecting={state.status === 'reconnecting'}>
