@@ -108,29 +108,8 @@ async function doReconnect(): Promise<boolean> {
     return connected
   } catch (err: any) {
     console.log('[offscreen] On-demand reconnect failed:', err.message)
-
-    // Session expired — try creating new session
-    if (err.message?.includes('Session not found') || err.message?.includes('expired')) {
-      try {
-        const result = await provider.connect(lastServerUrl, {
-          name: 'Remote Inject Bridge',
-          url: 'chrome-extension://' + chrome.runtime.id,
-        })
-        lastSessionId = result.sessionId
-        lastSessionUrl = result.url.startsWith('http') ? result.url : `${lastServerUrl}${result.url}`
-
-        sendToBackground({
-          type: 'state_update',
-          state: {
-            status: 'waiting',
-            sessionId: lastSessionId,
-            sessionUrl: lastSessionUrl,
-          } as OffscreenProviderState,
-        })
-      } catch {
-        // Total failure
-      }
-    }
+    // Stay in reconnecting state — don't auto-create new session.
+    // User can manually retry via the popup's refresh button.
     return false
   }
 }

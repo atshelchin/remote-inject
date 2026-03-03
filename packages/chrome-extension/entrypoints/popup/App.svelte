@@ -14,6 +14,7 @@
   })
 
   let error = $state('')
+  let debugMode = $state(false)
 
   onMount(() => {
     chrome.runtime.sendMessage({ type: 'popup_get_state' }, (response) => {
@@ -23,6 +24,10 @@
           error = response.state.error
         }
       }
+    })
+
+    chrome.storage.local.get('debugMode', (result) => {
+      debugMode = result.debugMode ?? false
     })
 
     chrome.storage.onChanged.addListener((changes) => {
@@ -44,12 +49,27 @@
   function disconnect() {
     chrome.runtime.sendMessage({ type: 'popup_disconnect' })
   }
+
+  function reconnect() {
+    chrome.runtime.sendMessage({ type: 'popup_reconnect' })
+  }
+
+  function toggleDebug() {
+    debugMode = !debugMode
+    chrome.storage.local.set({ debugMode })
+  }
 </script>
 
 <main>
   <header>
     <img src="/assets/icon.svg" alt="logo" class="logo" />
     <h1>Remote Inject</h1>
+    <button class="debug-toggle" class:active={debugMode} onclick={toggleDebug} title="Debug mode">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+        <path d="M8 10a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z" fill="currentColor"/>
+        <path d="M13.36 8.87a5.53 5.53 0 0 0 0-1.74l1.48-1.16a.35.35 0 0 0 .08-.45l-1.4-2.42a.35.35 0 0 0-.43-.15l-1.75.7a5.18 5.18 0 0 0-1.5-.87L9.58.88A.35.35 0 0 0 9.24.6H6.44a.35.35 0 0 0-.35.28l-.26 1.9a5.18 5.18 0 0 0-1.5.87l-1.75-.7a.35.35 0 0 0-.43.15L.75 5.52a.35.35 0 0 0 .08.45L2.3 7.13a5.53 5.53 0 0 0 0 1.74L.84 10.03a.35.35 0 0 0-.08.45l1.4 2.42a.35.35 0 0 0 .43.15l1.75-.7c.46.35.96.64 1.5.87l.26 1.9a.35.35 0 0 0 .35.28h2.8a.35.35 0 0 0 .35-.28l.26-1.9a5.18 5.18 0 0 0 1.5-.87l1.75.7a.35.35 0 0 0 .43-.15l1.4-2.42a.35.35 0 0 0-.08-.45l-1.5-1.16Z" stroke="currentColor" stroke-width="1.2" fill="none"/>
+      </svg>
+    </button>
     <span class="badge" class:connected={state.status === 'connected'} class:waiting={state.status === 'waiting' || state.status === 'connecting'} class:reconnecting={state.status === 'reconnecting'}>
       {state.status === 'connected' ? 'Connected' : state.status === 'waiting' ? 'Waiting' : state.status === 'connecting' ? 'Connecting' : state.status === 'reconnecting' ? 'Reconnecting' : 'Disconnected'}
     </span>
@@ -88,25 +108,34 @@
     {/if}
     <div class="reconnecting-banner">
       <div class="spinner small"></div>
-      <span>Connection lost, reconnecting automatically...</span>
+      <span class="banner-text">Connection lost, reconnecting...</span>
+      <button class="retry-btn" onclick={reconnect} title="Retry now">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+          <path d="M13.65 2.35A7.96 7.96 0 0 0 8 0C3.58 0 0 3.58 0 8s3.58 8 8 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 8 14 6 6 0 1 1 8 2c1.66 0 3.14.69 4.22 1.78L9 7h7V0l-2.35 2.35Z" fill="currentColor"/>
+        </svg>
+      </button>
     </div>
-    {#if state.sessionUrl}
-      <div class="session-hint">
-        <p>You can also open this link in your mobile wallet to reconnect faster:</p>
-        <code class="session-url">{state.sessionUrl}</code>
-      </div>
+    {#if debugMode}
+      {#if state.sessionUrl}
+        <div class="session-hint">
+          <p>You can also open this link in your mobile wallet to reconnect faster:</p>
+          <code class="session-url">{state.sessionUrl}</code>
+        </div>
+      {/if}
+      <RequestLog requests={state.requests} />
     {/if}
-    <RequestLog requests={state.requests} />
     <button class="btn danger" onclick={disconnect}>Disconnect</button>
   {:else if state.status === 'connected'}
     <ConnectedView account={state.account ?? ''} chainId={state.chainId ?? '0x1'} />
-    {#if state.sessionUrl}
-      <div class="session-hint">
-        <p>Wallet disconnected? Open the same link in your mobile wallet to reconnect:</p>
-        <code class="session-url">{state.sessionUrl}</code>
-      </div>
+    {#if debugMode}
+      {#if state.sessionUrl}
+        <div class="session-hint">
+          <p>Wallet disconnected? Open the same link in your mobile wallet to reconnect:</p>
+          <code class="session-url">{state.sessionUrl}</code>
+        </div>
+      {/if}
+      <RequestLog requests={state.requests} />
     {/if}
-    <RequestLog requests={state.requests} />
     <button class="btn danger" onclick={disconnect}>Disconnect</button>
   {/if}
 </main>
@@ -149,6 +178,30 @@
     font-size: 16px;
     font-weight: 600;
     flex: 1;
+  }
+
+  .debug-toggle {
+    background: none;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    color: #475569;
+    cursor: pointer;
+    padding: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s;
+  }
+
+  .debug-toggle:hover {
+    color: #94a3b8;
+    background: #1e293b;
+  }
+
+  .debug-toggle.active {
+    color: #3b82f6;
+    background: #1e3a5f;
+    border-color: #3b82f6;
   }
 
   .badge {
@@ -263,6 +316,29 @@
     padding: 10px 14px;
     font-size: 13px;
     color: #fb923c;
+  }
+
+  .banner-text {
+    flex: 1;
+  }
+
+  .retry-btn {
+    background: none;
+    border: 1px solid #78350f;
+    border-radius: 6px;
+    color: #fb923c;
+    cursor: pointer;
+    padding: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: all 0.15s;
+  }
+
+  .retry-btn:hover {
+    background: #78350f;
+    color: #fed7aa;
   }
 
   .spinner {

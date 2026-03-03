@@ -122,6 +122,7 @@ export type PopupToBackgroundMessage =
   | { type: 'popup_connect'; serverUrl: string }
   | { type: 'popup_disconnect' }
   | { type: 'popup_get_state' }
+  | { type: 'popup_reconnect' }
 
 export type BackgroundToPopupResponse = {
   state: ExtensionState

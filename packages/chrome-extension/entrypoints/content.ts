@@ -42,7 +42,19 @@ export default defineContentScript({
       return p
     }
 
-    // 4. Listen for messages from injected script
+    // 4. Forward debug mode setting to injected script
+    chrome.storage.local.get('debugMode', (result) => {
+      if (result.debugMode) {
+        window.postMessage({ source: MSG_SOURCE_CONTENT, type: 'debug_mode', enabled: true }, '*')
+      }
+    })
+    chrome.storage.onChanged.addListener((changes) => {
+      if (changes.debugMode) {
+        window.postMessage({ source: MSG_SOURCE_CONTENT, type: 'debug_mode', enabled: !!changes.debugMode.newValue }, '*')
+      }
+    })
+
+    // 5. Listen for messages from injected script
     window.addEventListener('message', (event) => {
       if (event.source !== window) return
       const data = event.data

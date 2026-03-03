@@ -8,17 +8,18 @@ const SOURCE_INJECTED = 'remote-inject-injected'
 const SOURCE_CONTENT = 'remote-inject-content'
 
 export default defineUnlistedScript(() => {
-  // ---- Logging ----
+  // ---- Logging (gated behind debug mode, toggled from extension popup) ----
+  let debugEnabled = false
   const TAG = '%c[RemoteInject]'
   const STYLE = 'color: #3b82f6; font-weight: bold'
   const STYLE_EVENT = 'color: #22c55e; font-weight: bold'
   const STYLE_WARN = 'color: #f59e0b; font-weight: bold'
   const STYLE_ERR = 'color: #ef4444; font-weight: bold'
 
-  function log(...args: any[]) { console.log(TAG, STYLE, ...args) }
-  function logEvent(...args: any[]) { console.log(TAG, STYLE_EVENT, ...args) }
-  function logWarn(...args: any[]) { console.warn(TAG, STYLE_WARN, ...args) }
-  function logErr(...args: any[]) { console.error(TAG, STYLE_ERR, ...args) }
+  function log(...args: any[]) { if (debugEnabled) console.log(TAG, STYLE, ...args) }
+  function logEvent(...args: any[]) { if (debugEnabled) console.log(TAG, STYLE_EVENT, ...args) }
+  function logWarn(...args: any[]) { if (debugEnabled) console.warn(TAG, STYLE_WARN, ...args) }
+  function logErr(...args: any[]) { if (debugEnabled) console.error(TAG, STYLE_ERR, ...args) }
 
   // ---- State ----
   let currentAccounts: string[] = []
@@ -335,6 +336,11 @@ export default defineUnlistedScript(() => {
     if (!data || data.source !== SOURCE_CONTENT) return
 
     switch (data.type) {
+      case 'debug_mode':
+        debugEnabled = !!data.enabled
+        if (debugEnabled) console.log(TAG, STYLE, 'Debug logging enabled')
+        break
+
       case 'rpc_response': {
         const pending = pendingRequests.get(data.requestId)
         if (!pending) {

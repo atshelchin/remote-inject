@@ -196,6 +196,14 @@ export default defineBackground(() => {
         updateBadge(false)
         return
 
+      case 'popup_reconnect':
+        getState().then((st) => {
+          if (st.serverUrl) {
+            handlePopupConnect(st.serverUrl)
+          }
+        })
+        return
+
       case 'popup_get_state':
         getState().then((state) => sendResponse({ state }))
         return true // keep sendResponse channel open for async
