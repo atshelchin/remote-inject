@@ -15,6 +15,28 @@ let lastSessionUrl = ''
 // Shared reconnection promise — multiple requests wait on the same attempt
 let reconnectPromise: Promise<boolean> | null = null
 
+// ------- Wait for connect event -------
+// SDK's resumeSession() resolves on 'ready' WS message, but provider.isConnected
+// is only set to true when the 'connect' message arrives (with account/chain data).
+// This helper waits for that connect event with a timeout.
+
+function waitForConnect(timeoutMs = 5000): Promise<boolean> {
+  if (provider.isConnected) return Promise.resolve(true)
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      provider.removeListener('connect', onConnect)
+      resolve(provider.isConnected)
+    }, timeoutMs)
+
+    function onConnect() {
+      clearTimeout(timer)
+      provider.removeListener('connect', onConnect)
+      resolve(true)
+    }
+    provider.on('connect', onConnect)
+  })
+}
+
 // ------- Send helpers -------
 
 function sendToBackground(msg: Record<string, unknown>) {
@@ -22,10 +44,23 @@ function sendToBackground(msg: Record<string, unknown>) {
 }
 
 function broadcastState() {
+  // Determine status carefully:
+  // - 'connected' if the provider is connected
+  // - 'reconnecting' if not connected but we have session data (transient disconnect)
+  // - 'disconnected' only if we truly have no session
+  // Sending 'disconnected' prematurely causes background to clear storage,
+  // which breaks the reconnection flow.
+  let status: OffscreenProviderState['status'] = 'disconnected'
+  if (provider.isConnected) {
+    status = 'connected'
+  } else if (lastSessionId && !userDisconnected) {
+    status = 'reconnecting'
+  }
+
   const state: OffscreenProviderState = {
-    status: provider.isConnected ? 'connected' : 'disconnected',
-    sessionId: provider.session.id || undefined,
-    sessionUrl: provider.session.url || undefined,
+    status,
+    sessionId: provider.session.id || lastSessionId || undefined,
+    sessionUrl: provider.session.url || lastSessionUrl || undefined,
     account: provider.accounts[0],
     chainId: provider.chainId,
   }
@@ -64,8 +99,13 @@ async function doReconnect(): Promise<boolean> {
       sessionUrl: lastSessionUrl,
     })
 
-    broadcastState()
-    return provider.isConnected
+    // resumeSession resolves on 'ready' but isConnected is still false
+    // until the 'connect' message arrives. Wait for it.
+    const connected = await waitForConnect(5000)
+    if (connected) {
+      broadcastState()
+    }
+    return connected
   } catch (err: any) {
     console.log('[offscreen] On-demand reconnect failed:', err.message)
 
@@ -103,15 +143,17 @@ provider.on('connect', (info) => {
 })
 
 provider.on('disconnect', (info: any) => {
-  sendToBackground({ type: 'event', event: 'disconnect', data: info })
-
   if (userDisconnected || info?.userInitiated) {
+    // Permanent disconnect — notify DApps so they clear state
+    sendToBackground({ type: 'event', event: 'disconnect', data: info })
     broadcastState()
     return
   }
 
-  // Don't eagerly reconnect — tell background we're in "stale" state
-  // but keep session data so we can reconnect on-demand when a request arrives
+  // Transient disconnect (WebSocket drop) — DON'T send disconnect event to DApps.
+  // Sending disconnect would clear accounts in injected.ts, causing DApps to restart
+  // auth flows and trigger /nonce 409 errors. Instead, just update status to
+  // 'reconnecting' which preserves cached accounts for DApps.
   sendToBackground({
     type: 'state_update',
     state: {
@@ -215,7 +257,10 @@ async function handleResume(serverUrl: string, sessionId: string, sessionUrl: st
 
     await provider.resumeSession({ serverUrl, sessionId, sessionUrl })
 
-    if (provider.isConnected) {
+    // resumeSession resolves on 'ready' but isConnected is still false
+    // until the 'connect' message arrives. Wait for it.
+    const connected = await waitForConnect(5000)
+    if (connected) {
       broadcastState()
     } else {
       // Resume means user already scanned QR before — show reconnecting, not waiting

@@ -772,6 +772,71 @@
       'wallet_requestPermissions',
     ])
 
+    // Handle chain switch with timeout — some wallets switch the chain but never
+    // resolve the wallet_switchEthereumChain promise (buggy WebView behavior).
+    // We race the RPC call against the chainChanged event to detect success.
+    function handleChainSwitch(params) {
+      const targetHex = params?.[0]?.chainId
+      if (!targetHex) return selectedProvider.request({ method: 'wallet_switchEthereumChain', params })
+
+      const targetChainId = parseInt(targetHex, 16)
+
+      // Already on target chain — return immediately
+      if (currentChainId === targetChainId) {
+        console.log('[Bridge] Already on chain', targetChainId, '— skipping switch')
+        return Promise.resolve(null)
+      }
+
+      return new Promise((resolve, reject) => {
+        let settled = false
+
+        // Listen for chainChanged — if chain becomes target, treat as success
+        const onChainChanged = (chainId) => {
+          if (settled) return
+          if (parseInt(chainId, 16) === targetChainId) {
+            settled = true
+            selectedProvider.removeListener?.('chainChanged', onChainChanged)
+            console.log('[Bridge] Chain switched via event to', targetChainId)
+            resolve(null)
+          }
+        }
+        selectedProvider.on?.('chainChanged', onChainChanged)
+
+        // Also call the actual RPC method
+        selectedProvider.request({ method: 'wallet_switchEthereumChain', params })
+          .then((result) => {
+            if (!settled) { settled = true; resolve(result) }
+          })
+          .catch((err) => {
+            if (!settled) { settled = true; reject(err) }
+          })
+          .finally(() => {
+            selectedProvider.removeListener?.('chainChanged', onChainChanged)
+          })
+
+        // Timeout fallback — check if chain already changed
+        setTimeout(() => {
+          if (settled) return
+          selectedProvider.removeListener?.('chainChanged', onChainChanged)
+          // Re-check current chain — wallet might have switched silently
+          selectedProvider.request({ method: 'eth_chainId' })
+            .then((chainId) => {
+              if (parseInt(chainId, 16) === targetChainId) {
+                settled = true
+                console.log('[Bridge] Chain switch confirmed via poll after timeout')
+                resolve(null)
+              } else {
+                settled = true
+                reject({ code: -32002, message: 'Chain switch timed out' })
+              }
+            })
+            .catch(() => {
+              if (!settled) { settled = true; reject({ code: -32002, message: 'Chain switch timed out' }) }
+            })
+        }, 8000)
+      })
+    }
+
     // Handle RPC request
     async function handleRequest(message) {
       const { id, method, params } = message
@@ -786,7 +851,10 @@
       }
 
       try {
-        const result = await selectedProvider.request({ method, params })
+        // Use special handler for chain switching (wallets may hang on this)
+        const result = method === 'wallet_switchEthereumChain'
+          ? await handleChainSwitch(params)
+          : await selectedProvider.request({ method, params })
         if (!needsConfirmation) {
           console.log('[Bridge]', method, '→ ok')
         } else {

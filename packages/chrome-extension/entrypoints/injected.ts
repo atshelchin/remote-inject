@@ -8,6 +8,18 @@ const SOURCE_INJECTED = 'remote-inject-injected'
 const SOURCE_CONTENT = 'remote-inject-content'
 
 export default defineUnlistedScript(() => {
+  // ---- Logging ----
+  const TAG = '%c[RemoteInject]'
+  const STYLE = 'color: #3b82f6; font-weight: bold'
+  const STYLE_EVENT = 'color: #22c55e; font-weight: bold'
+  const STYLE_WARN = 'color: #f59e0b; font-weight: bold'
+  const STYLE_ERR = 'color: #ef4444; font-weight: bold'
+
+  function log(...args: any[]) { console.log(TAG, STYLE, ...args) }
+  function logEvent(...args: any[]) { console.log(TAG, STYLE_EVENT, ...args) }
+  function logWarn(...args: any[]) { console.warn(TAG, STYLE_WARN, ...args) }
+  function logErr(...args: any[]) { console.error(TAG, STYLE_ERR, ...args) }
+
   // ---- State ----
   let currentAccounts: string[] = []
   let currentChainId = '0x1'
@@ -19,6 +31,7 @@ export default defineUnlistedScript(() => {
 
   function waitForState(): Promise<void> {
     if (stateReady) return Promise.resolve()
+    log('⏳ waitForState: waiting for initial state...')
     return new Promise((resolve) => {
       stateReadyCallbacks.push(resolve)
     })
@@ -27,6 +40,7 @@ export default defineUnlistedScript(() => {
   function markStateReady() {
     if (stateReady) return
     stateReady = true
+    log('✅ State ready:', { accounts: currentAccounts, chainId: currentChainId, connected: isConnected })
     stateReadyCallbacks.forEach((fn) => fn())
     stateReadyCallbacks = []
   }
@@ -41,7 +55,7 @@ export default defineUnlistedScript(() => {
   // ---- Pending requests ----
   const pendingRequests = new Map<
     string,
-    { resolve: (v: unknown) => void; reject: (e: any) => void }
+    { resolve: (v: unknown) => void; reject: (e: any) => void; method: string; startTime: number }
   >()
 
   // ---- Event emitter ----
@@ -49,10 +63,14 @@ export default defineUnlistedScript(() => {
   const listeners = new Map<EventName, Set<(...args: any[]) => void>>()
 
   function emit(event: EventName, ...args: any[]) {
+    const count = listeners.get(event)?.size ?? 0
+    logEvent(`📢 emit('${event}') → ${count} listener(s)`, ...args)
     listeners.get(event)?.forEach((fn) => {
       try {
         fn(...args)
-      } catch {}
+      } catch (e) {
+        logErr(`Event listener error for '${event}':`, e)
+      }
     })
   }
 
@@ -60,7 +78,10 @@ export default defineUnlistedScript(() => {
   function forwardRequest(method: string, params?: unknown): Promise<unknown> {
     return new Promise((resolve, reject) => {
       const requestId = crypto.randomUUID()
-      pendingRequests.set(requestId, { resolve, reject })
+      const startTime = Date.now()
+      pendingRequests.set(requestId, { resolve, reject, method, startTime })
+
+      log(`📤 FORWARD ${method} [${requestId.slice(0, 8)}]`, params ?? '')
 
       window.postMessage(
         { source: SOURCE_INJECTED, type: 'rpc_request', requestId, method, params },
@@ -72,6 +93,7 @@ export default defineUnlistedScript(() => {
           pendingRequests.delete(requestId)
           const err: any = new Error('Request timeout')
           err.code = -32003
+          logErr(`⏰ TIMEOUT ${method} [${requestId.slice(0, 8)}] after 60s`)
           reject(err)
         }
       }, 60_000)
@@ -106,10 +128,13 @@ export default defineUnlistedScript(() => {
     request(args: { method: string; params?: unknown }): Promise<unknown> {
       const { method, params } = args
 
+      log(`📥 REQUEST ${method}`, params ?? '')
+      log(`   state: connected=${isConnected}, accounts=[${currentAccounts.join(',')}], chain=${currentChainId}, stateReady=${stateReady}`)
+
       const result = provider._handleRequest(method, params)
       result.then(
-        (res) => console.log(`[RemoteInject] ${method} →`, res),
-        (err) => console.warn(`[RemoteInject] ${method} ✗`, err),
+        (res) => log(`✅ ${method} →`, res),
+        (err) => logWarn(`❌ ${method} ✗`, err.code, err.message),
       )
       return result
     },
@@ -118,15 +143,19 @@ export default defineUnlistedScript(() => {
       switch (method) {
         // ---- Locally handled: state reads (wait for initial state) ----
         case 'eth_accounts':
+          log(`   → LOCAL (cached accounts)`)
           return waitForState().then(() => [...currentAccounts])
 
         case 'eth_chainId':
+          log(`   → LOCAL (cached chainId)`)
           return waitForState().then(() => currentChainId)
 
         case 'net_version':
+          log(`   → LOCAL (cached net_version)`)
           return waitForState().then(() => String(parseInt(currentChainId, 16)))
 
         case 'eth_coinbase':
+          log(`   → LOCAL (cached coinbase)`)
           return waitForState().then(() => currentAccounts[0] ?? null)
 
         case 'web3_clientVersion':
@@ -134,6 +163,7 @@ export default defineUnlistedScript(() => {
 
         // ---- Locally handled: permissions (Uniswap calls these) ----
         case 'wallet_getPermissions':
+          log(`   → LOCAL (getPermissions)`)
           return waitForState().then(() =>
             isConnected
               ? [{ parentCapability: 'eth_accounts', caveats: [{ type: 'restrictReturnedAccounts', value: currentAccounts }] }]
@@ -141,29 +171,34 @@ export default defineUnlistedScript(() => {
           )
 
         case 'wallet_requestPermissions': {
-          // Return cached permissions if we have accounts (even during reconnecting)
           if (currentAccounts.length > 0) {
+            log(`   → LOCAL (requestPermissions, have cached accounts)`)
             return Promise.resolve([
               { parentCapability: 'eth_accounts', caveats: [{ type: 'restrictReturnedAccounts', value: currentAccounts }] },
             ])
           }
-          // Wait for state first — accounts might be on the way
           return waitForState().then(() => {
             if (currentAccounts.length > 0) {
+              log(`   → LOCAL (requestPermissions, accounts available after waitForState)`)
               return [{ parentCapability: 'eth_accounts', caveats: [{ type: 'restrictReturnedAccounts', value: currentAccounts }] }]
             }
-            // Many wallets don't support wallet_requestPermissions (EIP-2255).
-            // Use eth_requestAccounts instead and wrap result as permissions response.
-            return forwardRequest('eth_requestAccounts').then((accounts: any) => [
-              { parentCapability: 'eth_accounts', caveats: [{ type: 'restrictReturnedAccounts', value: accounts }] },
-            ])
+            log(`   → FORWARD as eth_requestAccounts (no cached accounts)`)
+            return forwardRequest('eth_requestAccounts').then((accounts: any) => {
+              // Update local state immediately so subsequent eth_accounts returns correct data
+              if (Array.isArray(accounts) && accounts.length > 0) {
+                currentAccounts = accounts
+                isConnected = true
+                log(`   → Updated local state: accounts=${accounts[0]}`)
+              }
+              return [
+                { parentCapability: 'eth_accounts', caveats: [{ type: 'restrictReturnedAccounts', value: accounts }] },
+              ]
+            })
           })
         }
 
         case 'wallet_revokePermissions':
-          // Handle locally — NEVER forward to mobile wallet.
-          // Forwarding would disconnect the bridge from the wallet, breaking everything.
-          // DApps call this to "disconnect"; we just return success without side effects.
+          log(`   → LOCAL (revokePermissions, no-op)`)
           return Promise.resolve(null)
 
         // ---- EIP-5792: try wallet first, cache result ----
@@ -180,17 +215,45 @@ export default defineUnlistedScript(() => {
 
         // ---- Connection request ----
         case 'eth_requestAccounts': {
-          // Wait for state first — may already be connected
           return waitForState().then(() => {
             if (isConnected && currentAccounts.length > 0) {
+              log(`   → LOCAL (requestAccounts, already connected)`)
               return [...currentAccounts]
             }
-            // Not connected — forward to wallet for initial connection
-            return forwardRequest(method, params)
+            log(`   → FORWARD (requestAccounts, not connected)`)
+            return forwardRequest(method, params).then((accounts: any) => {
+              // Update local state immediately so subsequent eth_accounts/eth_chainId work
+              if (Array.isArray(accounts) && accounts.length > 0) {
+                currentAccounts = accounts
+                isConnected = true
+                log(`   → Updated local state from requestAccounts: accounts=${accounts[0]}`)
+              }
+              return accounts
+            })
           })
         }
 
-        // ---- Methods that MUST go to mobile (signing, chain management) ----
+        // ---- Chain management (update local state immediately on success) ----
+        case 'wallet_switchEthereumChain': {
+          const targetChainId = (params as any)?.[0]?.chainId
+          log(`   → FORWARD to mobile wallet (switch to ${targetChainId})`)
+          return forwardRequest(method, params).then((result) => {
+            // Update chainId immediately on success — don't wait for async chainChanged event.
+            // DApps call eth_chainId right after switchChain and expect the new chain.
+            // IMPORTANT: Do NOT emit chainChanged here. The DApp called switchChain itself,
+            // so it already knows the chain changed. Emitting would trigger DApp listeners
+            // (e.g., Polymarket restarts SIWE auth flow → /nonce 409 conflict).
+            // The chainChanged event will come through the relay if needed, and dedup
+            // will skip it since currentChainId is already updated.
+            if (targetChainId && currentChainId !== targetChainId) {
+              log(`   → Chain updated silently: ${currentChainId} → ${targetChainId} (no emit — DApp initiated)`)
+              currentChainId = targetChainId
+            }
+            return result
+          })
+        }
+
+        // ---- Methods that MUST go to mobile (signing, transactions) ----
         case 'personal_sign':
         case 'eth_sign':
         case 'eth_signTypedData':
@@ -200,13 +263,14 @@ export default defineUnlistedScript(() => {
         case 'eth_sendTransaction':
         case 'eth_sendRawTransaction':
         case 'eth_signTransaction':
-        case 'wallet_switchEthereumChain':
         case 'wallet_addEthereumChain':
         case 'wallet_watchAsset':
+          log(`   → FORWARD to mobile wallet`)
           return forwardRequest(method, params)
 
         // ---- All other methods: forward to wallet ----
         default:
+          log(`   → FORWARD (default)`)
           return forwardRequest(method, params)
       }
     },
@@ -273,13 +337,19 @@ export default defineUnlistedScript(() => {
     switch (data.type) {
       case 'rpc_response': {
         const pending = pendingRequests.get(data.requestId)
-        if (!pending) break
+        if (!pending) {
+          logWarn(`📨 RESPONSE [${data.requestId?.slice(0, 8)}] — no pending request found (stale?)`)
+          break
+        }
+        const elapsed = Date.now() - pending.startTime
         pendingRequests.delete(data.requestId)
         if (data.error) {
+          logWarn(`📨 RESPONSE ${pending.method} [${data.requestId.slice(0, 8)}] ERROR (${elapsed}ms):`, data.error)
           const err: any = new Error(data.error.message)
           err.code = data.error.code
           pending.reject(err)
         } else {
+          log(`📨 RESPONSE ${pending.method} [${data.requestId.slice(0, 8)}] OK (${elapsed}ms):`, data.result)
           pending.resolve(data.result)
         }
         break
@@ -288,37 +358,82 @@ export default defineUnlistedScript(() => {
       case 'event': {
         switch (data.event) {
           case 'connect':
-            isConnected = true
-            emit('connect', data.data)
+            if (!isConnected) {
+              log(`📡 EVENT connect — activating`)
+              isConnected = true
+              emit('connect', data.data)
+            } else {
+              log(`📡 EVENT connect — already connected, skipped`)
+            }
             break
           case 'disconnect':
-            isConnected = false
-            currentAccounts = []
-            emit('disconnect', data.data)
+            if (isConnected) {
+              logWarn(`📡 EVENT disconnect — deactivating`)
+              isConnected = false
+              currentAccounts = []
+              emit('disconnect', data.data)
+            } else {
+              log(`📡 EVENT disconnect — already disconnected, skipped`)
+            }
             break
-          case 'chainChanged':
-            currentChainId = data.data as string
-            emit('chainChanged', currentChainId)
+          case 'chainChanged': {
+            const newChain = data.data as string
+            if (currentChainId !== newChain) {
+              log(`📡 EVENT chainChanged: ${currentChainId} → ${newChain}`)
+              currentChainId = newChain
+              emit('chainChanged', currentChainId)
+            } else {
+              log(`📡 EVENT chainChanged: same chain ${newChain}, skipped`)
+            }
             break
-          case 'accountsChanged':
-            currentAccounts = (data.data as string[]) || []
-            emit('accountsChanged', [...currentAccounts])
+          }
+          case 'accountsChanged': {
+            const newAccounts = (data.data as string[]) || []
+            const changed = currentAccounts.length !== newAccounts.length ||
+              currentAccounts.some((a, i) => a !== newAccounts[i])
+            currentAccounts = newAccounts
+            if (changed) {
+              log(`📡 EVENT accountsChanged:`, newAccounts)
+              emit('accountsChanged', [...currentAccounts])
+            } else {
+              log(`📡 EVENT accountsChanged: same accounts, skipped`)
+            }
             break
+          }
         }
         break
       }
 
       case 'state_update': {
         const wasConnected = isConnected
+        const prevAccounts = currentAccounts
+        const prevChainId = currentChainId
+
         currentAccounts = data.accounts || []
         currentChainId = data.chainId || '0x1'
         isConnected = data.connected || false
+
+        log(`📡 STATE_UPDATE: connected=${isConnected}, accounts=[${currentAccounts.join(',')}], chain=${currentChainId}`)
+        log(`   prev: connected=${wasConnected}, accounts=[${prevAccounts.join(',')}], chain=${prevChainId}`)
 
         if (isConnected && currentAccounts.length > 0) {
           if (!wasConnected) {
             emit('connect', { chainId: currentChainId })
           }
-          emit('accountsChanged', [...currentAccounts])
+          // Only emit accountsChanged when accounts actually change
+          const accountsChanged = prevAccounts.length !== currentAccounts.length ||
+            prevAccounts.some((a, i) => a !== currentAccounts[i])
+          if (accountsChanged) {
+            emit('accountsChanged', [...currentAccounts])
+          } else {
+            log(`   accountsChanged skipped (same accounts)`)
+          }
+          // Only emit chainChanged when chain actually changes
+          if (prevChainId !== currentChainId) {
+            emit('chainChanged', currentChainId)
+          } else {
+            log(`   chainChanged skipped (same chain)`)
+          }
         } else if (wasConnected && !isConnected) {
           emit('disconnect', { code: 4900, message: 'Disconnected' })
         }
@@ -344,6 +459,7 @@ export default defineUnlistedScript(() => {
   })
 
   function announceProvider() {
+    log('🔔 EIP-6963 announceProvider')
     window.dispatchEvent(
       new CustomEvent('eip6963:announceProvider', {
         detail: Object.freeze({ info: providerInfo, provider }),
@@ -360,6 +476,8 @@ export default defineUnlistedScript(() => {
     if (providerActivated) return
     providerActivated = true
 
+    log('🚀 Provider activated:', { connected: isConnected, accounts: currentAccounts, chainId: currentChainId })
+
     announceProvider()
     window.addEventListener('eip6963:requestProvider', announceProvider)
 
@@ -370,8 +488,14 @@ export default defineUnlistedScript(() => {
         writable: true,
         configurable: true,
       })
+      log('   Set window.ethereum')
     }
   }
+
+  // Signal to content script that we're ready to receive messages.
+  // Content script buffers the latest state_update and re-sends it when it sees this.
+  window.postMessage({ source: SOURCE_INJECTED, type: 'ready' }, '*')
+  log('🤝 Sent ready signal to content script')
 
   // Fallback: if state_update doesn't arrive within 500ms, activate anyway
   // (e.g., extension is disconnected and has no state to send)

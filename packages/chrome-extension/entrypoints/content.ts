@@ -10,13 +10,24 @@ export default defineContentScript({
     // 1. Inject the main-world script immediately
     injectScript('/injected.js', { keepInDom: true })
 
-    // 2. Connect to background
+    // 2. Buffer the latest state_update so we can re-send it when injected.js is ready.
+    //    The initial state_update from background often arrives before injected.js has
+    //    set up its message listener, causing the state to be lost.
+    let lastStateUpdate: BackgroundToContentMessage | null = null
+    let injectedReady = false
+
+    // 3. Connect to background
     let port = connectPort()
 
     function connectPort(): chrome.runtime.Port {
       const p = chrome.runtime.connect({ name: PORT_NAME_CONTENT })
 
       p.onMessage.addListener((msg: BackgroundToContentMessage) => {
+        // Buffer state_update messages
+        if (msg.type === 'state_update') {
+          lastStateUpdate = msg
+        }
+
         // Forward from background → injected script
         window.postMessage({ ...msg, source: MSG_SOURCE_CONTENT }, '*')
       })
@@ -31,11 +42,20 @@ export default defineContentScript({
       return p
     }
 
-    // 3. Listen for messages from injected script → forward to background
+    // 4. Listen for messages from injected script
     window.addEventListener('message', (event) => {
       if (event.source !== window) return
       const data = event.data
       if (!data || data.source !== MSG_SOURCE_INJECTED) return
+
+      // Injected.js signals it's ready — re-send the buffered state
+      if (data.type === 'ready') {
+        injectedReady = true
+        if (lastStateUpdate) {
+          window.postMessage({ ...lastStateUpdate, source: MSG_SOURCE_CONTENT }, '*')
+        }
+        return
+      }
 
       if (data.type === 'rpc_request') {
         const msg: ContentToBackgroundMessage = {
@@ -47,8 +67,7 @@ export default defineContentScript({
         try {
           port.postMessage(msg)
         } catch {
-          // Port disconnected; queue will be handled on reconnect
-          // For now, send error back
+          // Port disconnected; send error back
           window.postMessage(
             {
               source: MSG_SOURCE_CONTENT,
