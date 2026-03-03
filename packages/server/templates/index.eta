@@ -438,9 +438,12 @@
     .config-tree .file { color: var(--color-text-primary); }
     .config-tree .comment { color: var(--color-text-muted); font-style: italic; }
 
+    .ext-steps { grid-template-columns: repeat(3, 1fr); }
+
     /* Responsive */
     @media (max-width: 768px) {
       .features { grid-template-columns: 1fr; }
+      .ext-steps { grid-template-columns: 1fr; }
       .config-grid { grid-template-columns: 1fr; }
       .hero { padding: 40px 20px; }
       .hero h1 { font-size: 36px; letter-spacing: -1px; }
@@ -592,6 +595,47 @@
         SDK forwards requests via Relay server to mobile Bridge page, where your real wallet provider handles them.
       <% } %>
     </p>
+  </section>
+
+  <!-- Chrome Extension -->
+  <section class="section">
+    <h2 class="section-title"><% if (it.locale === 'zh') { %>Chrome 插件<% } else { %>Chrome Extension<% } %></h2>
+    <p class="flow-desc" style="margin-bottom: 32px;">
+      <% if (it.locale === 'zh') { %>
+        无需 DApp 集成 SDK，安装插件即可在任意网页使用移动钱包签名。
+      <% } else { %>
+        No SDK integration needed. Install the extension to use your mobile wallet on any DApp.
+      <% } %>
+    </p>
+    <div class="features ext-steps">
+      <div class="feature" style="text-align: center;">
+        <div class="feature-icon" style="margin: 0 auto 16px;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        </div>
+        <h3><% if (it.locale === 'zh') { %>1. 安装插件<% } else { %>1. Install<% } %></h3>
+        <p><% if (it.locale === 'zh') { %>从 GitHub Releases 下载并加载到 Chrome<% } else { %>Download from GitHub Releases and load in Chrome<% } %></p>
+      </div>
+      <div class="feature" style="text-align: center;">
+        <div class="feature-icon" style="margin: 0 auto 16px;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="2"/><path d="M7 7h4v4H7zM7 13h4v4H7zM13 7h4v4h-4zM13 13h4v4h-4z"/></svg>
+        </div>
+        <h3><% if (it.locale === 'zh') { %>2. 扫码连接<% } else { %>2. Scan & Connect<% } %></h3>
+        <p><% if (it.locale === 'zh') { %>输入服务器地址，用手机钱包扫码<% } else { %>Enter server URL, scan QR with mobile wallet<% } %></p>
+      </div>
+      <div class="feature" style="text-align: center;">
+        <div class="feature-icon" style="margin: 0 auto 16px;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
+        </div>
+        <h3><% if (it.locale === 'zh') { %>3. 使用 DApp<% } else { %>3. Use Any DApp<% } %></h3>
+        <p><% if (it.locale === 'zh') { %>打开任意 DApp，自动提供钱包连接<% } else { %>Open any DApp, wallet connection is automatic<% } %></p>
+      </div>
+    </div>
+    <div style="text-align: center; margin-top: 32px;">
+      <a href="https://github.com/atshelchin/remote-inject/releases" class="btn btn-primary" target="_blank">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        <% if (it.locale === 'zh') { %>下载 Chrome 插件<% } else { %>Download Chrome Extension<% } %>
+      </a>
+    </div>
   </section>
 
   <!-- Quick Start -->

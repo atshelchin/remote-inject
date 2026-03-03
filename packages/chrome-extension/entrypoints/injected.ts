@@ -152,10 +152,19 @@ export default defineUnlistedScript(() => {
             if (currentAccounts.length > 0) {
               return [{ parentCapability: 'eth_accounts', caveats: [{ type: 'restrictReturnedAccounts', value: currentAccounts }] }]
             }
-            // Truly no accounts — forward to wallet for initial connection
-            return forwardRequest(method, params)
+            // Many wallets don't support wallet_requestPermissions (EIP-2255).
+            // Use eth_requestAccounts instead and wrap result as permissions response.
+            return forwardRequest('eth_requestAccounts').then((accounts: any) => [
+              { parentCapability: 'eth_accounts', caveats: [{ type: 'restrictReturnedAccounts', value: accounts }] },
+            ])
           })
         }
+
+        case 'wallet_revokePermissions':
+          // Handle locally — NEVER forward to mobile wallet.
+          // Forwarding would disconnect the bridge from the wallet, breaking everything.
+          // DApps call this to "disconnect"; we just return success without side effects.
+          return Promise.resolve(null)
 
         // ---- EIP-5792: try wallet first, cache result ----
         case 'wallet_getCapabilities':
@@ -185,10 +194,12 @@ export default defineUnlistedScript(() => {
         case 'personal_sign':
         case 'eth_sign':
         case 'eth_signTypedData':
+        case 'eth_signTypedData_v1':
         case 'eth_signTypedData_v3':
         case 'eth_signTypedData_v4':
         case 'eth_sendTransaction':
         case 'eth_sendRawTransaction':
+        case 'eth_signTransaction':
         case 'wallet_switchEthereumChain':
         case 'wallet_addEthereumChain':
         case 'wallet_watchAsset':

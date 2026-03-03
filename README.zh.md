@@ -119,6 +119,27 @@ bun run dev
 | 落地页 | 纯 HTML | 无框架，扫码后的引导页 |
 | 桥接页 | 纯 HTML | 无框架，钱包 WebView 内运行 |
 | SDK | TypeScript | EIP-1193 Provider |
+| Chrome 插件 | WXT + Svelte | MV3，注入 provider 到任意页面 |
+
+## Chrome 插件
+
+对于未集成 SDK 的 DApp，可以使用 **Remote Inject Bridge** Chrome 插件，将 EIP-1193/EIP-6963 provider 注入到任意网页。
+
+### 安装
+
+1. 从 [GitHub Releases](https://github.com/atshelchin/remote-inject/releases) 下载最新版本
+2. 解压 zip 文件
+3. 打开 Chrome → `chrome://extensions/`
+4. 开启右上角的 **开发者模式**
+5. 点击 **加载已解压的扩展程序** → 选择解压后的文件夹
+
+### 使用方法
+
+1. 点击插件图标 → 输入 Remote Inject 服务器地址 → 连接
+2. 用手机钱包扫描二维码
+3. 打开任意 DApp — 插件自动提供钱包连接
+
+插件兼容所有支持 EIP-6963 的 DApp（Uniswap、Aave 等），同时也设置 `window.ethereum` 兼容旧版 DApp。
 
 ## 项目结构
 
@@ -137,12 +158,22 @@ remote-inject/
 │   │   ├── package.json
 │   │   └── tsconfig.json
 │   │
-│   └── sdk/                    # DApp SDK
-│       ├── src/
-│       │   ├── provider.ts     # EIP-1193 Provider
-│       │   └── index.ts        # 导出入口
-│       ├── package.json
-│       └── tsconfig.json
+│   ├── sdk/                    # DApp SDK
+│   │   ├── src/
+│   │   │   ├── provider.ts     # EIP-1193 Provider
+│   │   │   └── index.ts        # 导出入口
+│   │   ├── package.json
+│   │   └── tsconfig.json
+│   │
+│   └── chrome-extension/       # Chrome 插件 (MV3)
+│       ├── entrypoints/
+│       │   ├── background.ts   # Service Worker
+│       │   ├── content.ts      # Content Script 桥接
+│       │   ├── injected.ts     # EIP-1193/6963 provider
+│       │   ├── offscreen/      # WebSocket 宿主（SDK）
+│       │   └── popup/          # 插件弹窗 UI（Svelte）
+│       ├── wxt.config.ts
+│       └── package.json
 │
 ├── package.json                # Monorepo 根配置
 ├── turbo.json                  # Turborepo 配置

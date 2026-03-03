@@ -119,6 +119,27 @@ Server runs on `http://localhost:3700` by default.
 | Landing Page | Pure HTML | No framework, post-scan guide page |
 | Bridge Page | Pure HTML | No framework, runs in wallet WebView |
 | SDK | TypeScript | EIP-1193 Provider |
+| Chrome Extension | WXT + Svelte | MV3, injects provider into any page |
+
+## Chrome Extension
+
+For DApps that haven't integrated the SDK, you can use the **Remote Inject Bridge** Chrome extension to inject an EIP-1193/EIP-6963 provider into any web page.
+
+### Install
+
+1. Download the latest release from [GitHub Releases](https://github.com/atshelchin/remote-inject/releases)
+2. Extract the zip file
+3. Open Chrome → `chrome://extensions/`
+4. Enable **Developer mode** (top right)
+5. Click **Load unpacked** → select the extracted folder
+
+### Usage
+
+1. Click the extension icon → enter your Remote Inject server URL → Connect
+2. Scan the QR code with your mobile wallet
+3. Open any DApp — the extension automatically provides a wallet connection
+
+The extension works with any EIP-6963 compatible DApp (Uniswap, Aave, etc.) and also sets `window.ethereum` for legacy DApps.
 
 ## Project Structure
 
@@ -137,12 +158,22 @@ remote-inject/
 │   │   ├── package.json
 │   │   └── tsconfig.json
 │   │
-│   └── sdk/                    # DApp SDK
-│       ├── src/
-│       │   ├── provider.ts     # EIP-1193 Provider
-│       │   └── index.ts        # Export entry
-│       ├── package.json
-│       └── tsconfig.json
+│   ├── sdk/                    # DApp SDK
+│   │   ├── src/
+│   │   │   ├── provider.ts     # EIP-1193 Provider
+│   │   │   └── index.ts        # Export entry
+│   │   ├── package.json
+│   │   └── tsconfig.json
+│   │
+│   └── chrome-extension/       # Chrome Extension (MV3)
+│       ├── entrypoints/
+│       │   ├── background.ts   # Service Worker
+│       │   ├── content.ts      # Content Script bridge
+│       │   ├── injected.ts     # EIP-1193/6963 provider
+│       │   ├── offscreen/      # WebSocket host (SDK)
+│       │   └── popup/          # Extension popup UI (Svelte)
+│       ├── wxt.config.ts
+│       └── package.json
 │
 ├── package.json                # Monorepo root config
 ├── turbo.json                  # Turborepo config
