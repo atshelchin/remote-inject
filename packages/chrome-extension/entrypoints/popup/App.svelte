@@ -16,21 +16,38 @@
   })
 
   let error = $state('')
-  let debugMode = $state(false)
-  let reconnectPending = $state(false)
+  let showQR = $state(false)
+  let theme = $state<'light' | 'dark'>('dark')
+
+  // Sync theme to document so CSS variables cascade correctly
+  $effect(() => {
+    document.documentElement.dataset.theme = theme
+  })
+
+  function queryTabTheme(tabId?: number) {
+    const send = (id: number) => {
+      chrome.tabs.sendMessage(id, { type: 'query_page_theme' }, (response) => {
+        if (chrome.runtime.lastError) return
+        if (response?.theme === 'light' || response?.theme === 'dark') theme = response.theme
+      })
+    }
+    if (tabId != null) {
+      send(tabId)
+    } else {
+      chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
+        if (tab?.id != null) send(tab.id)
+      })
+    }
+  }
 
   onMount(() => {
+    queryTabTheme()
+
     chrome.runtime.sendMessage({ type: 'popup_get_state' }, (response) => {
       if (response?.state) {
         state = response.state
-        if (response.state.error) {
-          error = response.state.error
-        }
+        if (response.state.error) error = response.state.error
       }
-    })
-
-    chrome.storage.local.get('debugMode', (result) => {
-      debugMode = result.debugMode ?? false
     })
 
     chrome.storage.onChanged.addListener((changes) => {
@@ -38,9 +55,13 @@
         const newState = changes.extensionState.newValue
         state = newState
         if (newState.error) error = newState.error
-        if (newState.status !== 'reconnecting') reconnectPending = false
       }
     })
+
+    // Sidepanel: re-query theme whenever the active tab changes
+    if (sidepanel) {
+      chrome.tabs.onActivated.addListener(({ tabId }) => queryTabTheme(tabId))
+    }
   })
 
   function connect(serverUrl: string) {
@@ -50,18 +71,6 @@
 
   function disconnect() {
     chrome.runtime.sendMessage({ type: 'popup_disconnect' })
-  }
-
-  function reconnect() {
-    if (reconnectPending) return
-    reconnectPending = true
-    chrome.runtime.sendMessage({ type: 'popup_reconnect' })
-    setTimeout(() => { reconnectPending = false }, 10000)
-  }
-
-  function toggleDebug() {
-    debugMode = !debugMode
-    chrome.storage.local.set({ debugMode })
   }
 
   async function openSidepanel() {
@@ -74,24 +83,35 @@
     }
   }
 
+  function closeSidepanel() {
+    window.close()
+  }
+
   let statusLabel = $derived(
-    state.status === 'connected' ? 'Connected'
-    : state.status === 'waiting' ? 'Waiting'
-    : state.status === 'connecting' ? 'Connecting'
+    state.status === 'connected'      ? 'Connected'
+    : state.status === 'waiting'      ? 'Waiting'
+    : state.status === 'connecting'   ? 'Connecting'
     : state.status === 'reconnecting' ? 'Reconnecting'
     : 'Offline'
   )
 
-  let showActivity = $derived(sidepanel || debugMode)
 </script>
 
 <div class="app" class:sidepanel>
   <!-- ── Header ── -->
   <header>
-    <img src="/assets/icon.png" alt="" class="logo" />
-    <span class="brand">Remote Inject Bridge</span>
+    {#if !sidepanel}
+      <img src="/assets/icon.png" alt="" class="logo" />
+      <span class="brand">Remote Inject Bridge</span>
+    {/if}
     <div class="header-right">
-      {#if !sidepanel}
+      {#if sidepanel}
+        <button class="icon-btn" onclick={closeSidepanel} title="Close side panel">
+          <svg width="13" height="13" viewBox="0 0 14 14" fill="none">
+            <path d="M1 1l12 12M13 1L1 13" stroke="currentColor" stroke-width="1.35" stroke-linecap="round"/>
+          </svg>
+        </button>
+      {:else}
         <button class="icon-btn" onclick={openSidepanel} title="Open in side panel">
           <svg width="13" height="13" viewBox="0 0 14 14" fill="none">
             <rect x="0.65" y="0.65" width="12.7" height="12.7" rx="2" stroke="currentColor" stroke-width="1.3"/>
@@ -99,13 +119,6 @@
           </svg>
         </button>
       {/if}
-      <button class="icon-btn" class:active={debugMode} onclick={toggleDebug} title="Debug">
-        <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
-          <path d="M8 14a4 4 0 0 0 4-4V8a4 4 0 0 0-8 0v2a4 4 0 0 0 4 4Z" stroke="currentColor" stroke-width="1.3" fill="none"/>
-          <path d="M5.5 8.5h5M5.5 11h5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
-          <path d="M8 4V2M5 5L3 3.5M11 5l2-1.5M4 8H1.5M12 8h2.5M4 12l-2 1.5M12 12l2 1.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
-        </svg>
-      </button>
       <span
         class="status-chip"
         class:connected={state.status === 'connected'}
@@ -146,13 +159,12 @@
     <div class="qr-view">
       <p class="qr-hint">Open in your mobile wallet's DApp browser</p>
       {#if state.sessionUrl}
-        <QRCode url={state.sessionUrl} />
+        <QRCode url={state.sessionUrl} {theme} />
       {/if}
       {#if state.sessionId}
         <div class="session-strip">
           <span class="strip-label">Session</span>
           <span class="strip-code">{state.sessionId}</span>
-          <span class="strip-verify">verify</span>
         </div>
       {/if}
       <button class="btn-outline" onclick={disconnect}>Cancel</button>
@@ -160,47 +172,52 @@
 
   <!-- ── Reconnecting ── -->
   {:else if state.status === 'reconnecting'}
-    <div class="main-view">
-      {#if state.account}
-        <ConnectedView account={state.account} chainId={state.chainId ?? '0x1'} sessionId={state.sessionId} dim />
-      {/if}
-      <div class="alert-row">
-        <span class="alert-dot"></span>
-        <span class="alert-text">Connection lost</span>
-        <button class="retry-btn" onclick={reconnect} disabled={reconnectPending}>
-          {#if reconnectPending}
-            <span class="mini-ring"></span>
-          {:else}
-            Retry
-          {/if}
-        </button>
+    {#if state.account}
+      <!-- SSE dropped but walletInfo is cached — show as connected, reconnects automatically -->
+      <div class="main-view">
+        <ConnectedView account={state.account} chainId={state.chainId ?? '0x1'} sessionId={state.sessionId} />
+        <RequestLog requests={state.requests} />
+        <button class="btn-disconnect" onclick={disconnect}>Disconnect</button>
       </div>
-      <p class="tip">Keep the bridge page open on your phone</p>
-      {#if showActivity}
+    {:else}
+      <!-- No wallet data yet — show QR so wallet can connect -->
+      <div class="qr-view">
+        <p class="qr-hint">Open in your mobile wallet's DApp browser</p>
         {#if state.sessionUrl}
-          <div class="url-box">
-            <p class="url-label">Session URL — paste into wallet to reconnect</p>
-            <code class="url-val">{state.sessionUrl}</code>
+          <QRCode url={state.sessionUrl} {theme} />
+        {/if}
+        {#if state.sessionId}
+          <div class="session-strip">
+            <span class="strip-label">Session</span>
+            <span class="strip-code">{state.sessionId}</span>
           </div>
         {/if}
-        <RequestLog requests={state.requests} />
-      {/if}
-      <button class="btn-disconnect" onclick={disconnect}>Disconnect</button>
-    </div>
+        <button class="btn-outline" onclick={disconnect}>Cancel</button>
+      </div>
+    {/if}
 
   <!-- ── Connected ── -->
   {:else if state.status === 'connected'}
     <div class="main-view">
       <ConnectedView account={state.account ?? ''} chainId={state.chainId ?? '0x1'} sessionId={state.sessionId} />
-      {#if showActivity}
-        {#if state.sessionUrl}
-          <div class="url-box">
-            <p class="url-label">Session URL — paste into wallet to reconnect</p>
-            <code class="url-val">{state.sessionUrl}</code>
+      {#if state.sessionUrl}
+        <button class="qr-toggle" onclick={() => (showQR = !showQR)}>
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+            <path d="M2 3h3v3H2zM7 3h3v3H7zM2 7h3v3H2z" stroke="currentColor" stroke-width="1.1"/>
+            <path d="M8 7h.5M9.5 7H10M8 8.5v.5M8 10v.5M10 8.5v.5M10 10v.5M9.5 9h.5" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/>
+          </svg>
+          {showQR ? 'Hide QR' : 'Show QR code'}
+          <svg class="chevron" class:open={showQR} width="10" height="10" viewBox="0 0 10 10" fill="none">
+            <path d="M2 3.5l3 3 3-3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+        {#if showQR}
+          <div class="qr-view">
+            <QRCode url={state.sessionUrl} {theme} />
           </div>
         {/if}
-        <RequestLog requests={state.requests} />
       {/if}
+      <RequestLog requests={state.requests} />
       <button class="btn-disconnect" onclick={disconnect}>Disconnect</button>
     </div>
   {/if}
@@ -213,42 +230,63 @@
     box-sizing: border-box;
   }
 
+  /* ── Design tokens: dark (default) ── */
   :global(:root) {
-    --bg:         #0f0f11;
-    --s1:         #1b1b1f;
-    --s2:         #252529;
-    --ln:         rgba(255,255,255,0.07);
-    --ln2:        rgba(255,255,255,0.12);
-    --t1:         #edeef1;
-    --t2:         #8a8a94;
-    --t3:         #52525c;
-    --blue:       #4b8cff;
-    --blue-bg:    rgba(75,140,255,0.1);
-    --green:      #2dca78;
-    --green-bg:   rgba(45,202,120,0.1);
-    --amber:      #f5a130;
-    --amber-bg:   rgba(245,161,48,0.1);
-    --red:        #e04444;
-    --red-bg:     rgba(224,68,68,0.1);
-    --mono:       'SF Mono', 'Cascadia Code', Monaco, monospace;
-    --r:          9px;
+    --bg:        #121210;
+    --s1:        #1c1c1a;
+    --s2:        #252523;
+    --ln:        rgba(255,255,255,0.08);
+    --ln2:       rgba(255,255,255,0.18);
+    --t1:        #f0f0ed;
+    --t2:        #b4b4ac;
+    --t3:        #888880;
+    --accent:    #e07040;
+    --accent-bg: rgba(224,112,64,0.12);
+    --green:     #4caf78;
+    --green-bg:  rgba(76,175,120,0.12);
+    --amber:     #d4901a;
+    --amber-bg:  rgba(212,144,26,0.12);
+    --red:       #d94040;
+    --red-bg:    rgba(217,64,64,0.12);
+    --mono:      'JetBrains Mono', 'Cascadia Code', 'SF Mono', Monaco, monospace;
+    --r:         8px;
+  }
+
+  /* ── Light theme ── */
+  :global([data-theme="light"]) {
+    --bg:        #faf9f7;
+    --s1:        #f0efe9;
+    --s2:        #e4e3dc;
+    --ln:        rgba(0,0,0,0.1);
+    --ln2:       rgba(0,0,0,0.22);
+    --t1:        #1a1a18;
+    --t2:        #5a5a52;
+    --t3:        #7e7e76;
+    --accent:    #c45a2c;
+    --accent-bg: rgba(196,90,44,0.1);
+    --green:     #2e7d52;
+    --green-bg:  rgba(46,125,82,0.1);
+    --amber:     #a07020;
+    --amber-bg:  rgba(160,112,32,0.1);
+    --red:       #c03030;
+    --red-bg:    rgba(192,48,48,0.1);
+  }
+
+  :global(html) {
+    background: var(--bg);
+    min-height: 100%;
   }
 
   :global(body) {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
     background: var(--bg);
     color: var(--t1);
     -webkit-font-smoothing: antialiased;
     line-height: 1.5;
   }
 
-  :global(body.is-popup) {
-    width: 340px;
-  }
-
-  :global(body.is-sidepanel) {
-    min-height: 100vh;
-  }
+  :global(body.is-popup)    { width: 360px; }
+  :global(body.is-sidepanel){ min-height: 100vh; }
 
   /* ── App shell ── */
   .app {
@@ -273,7 +311,7 @@
   }
 
   .brand {
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 600;
     color: var(--t1);
     flex: 1;
@@ -287,6 +325,7 @@
     align-items: center;
     gap: 3px;
     flex-shrink: 0;
+    margin-left: auto;
   }
 
   .icon-btn {
@@ -302,22 +341,21 @@
     transition: color 0.12s, background 0.12s;
     line-height: 1;
   }
-
   .icon-btn:hover { color: var(--t2); background: var(--s1); }
-  .icon-btn.active { color: var(--blue); background: var(--blue-bg); }
 
   .status-chip {
-    font-size: 10px;
+    font-size: 11px;
     font-weight: 500;
     padding: 2px 7px;
     border-radius: 99px;
     background: var(--s1);
     color: var(--t3);
     margin-left: 2px;
+    white-space: nowrap;
   }
-  .status-chip.connected { background: var(--green-bg); color: var(--green); }
-  .status-chip.pending   { background: var(--blue-bg);  color: var(--blue);  }
-  .status-chip.warning   { background: var(--amber-bg); color: var(--amber); }
+  .status-chip.connected { background: var(--green-bg);  color: var(--green);  }
+  .status-chip.pending   { background: var(--accent-bg); color: var(--accent); }
+  .status-chip.warning   { background: var(--amber-bg);  color: var(--amber);  }
 
   /* ── Error bar ── */
   .error-bar {
@@ -325,14 +363,13 @@
     align-items: center;
     gap: 8px;
     background: var(--red-bg);
-    border: 1px solid rgba(224,68,68,0.2);
+    border: 1px solid rgba(217,64,64,0.2);
     border-radius: 8px;
     padding: 8px 10px;
-    font-size: 12px;
+    font-size: 13px;
     color: var(--red);
   }
   .error-bar span { flex: 1; }
-
   .dismiss {
     background: none;
     border: none;
@@ -353,10 +390,9 @@
     flex-direction: column;
     gap: 10px;
   }
-
   .setup-desc {
-    font-size: 12px;
-    color: var(--t3);
+    font-size: 13px;
+    color: var(--t2);
     line-height: 1.55;
   }
 
@@ -373,26 +409,16 @@
     width: 26px;
     height: 26px;
     border: 2px solid var(--s2);
-    border-top-color: var(--blue);
+    border-top-color: var(--accent);
     border-radius: 50%;
     animation: spin 0.65s linear infinite;
     display: block;
   }
 
-  .mini-ring {
-    width: 10px;
-    height: 10px;
-    border: 1.5px solid rgba(245,161,48,0.3);
-    border-top-color: var(--amber);
-    border-radius: 50%;
-    animation: spin 0.65s linear infinite;
-    display: inline-block;
-  }
-
   @keyframes spin { to { transform: rotate(360deg); } }
 
   .state-text {
-    font-size: 13px;
+    font-size: 14px;
     color: var(--t2);
   }
 
@@ -403,9 +429,8 @@
     align-items: center;
     gap: 10px;
   }
-
   .qr-hint {
-    font-size: 12px;
+    font-size: 13px;
     color: var(--t2);
     text-align: center;
     line-height: 1.5;
@@ -424,7 +449,7 @@
   }
 
   .strip-label {
-    font-size: 10px;
+    font-size: 11px;
     color: var(--t3);
     text-transform: uppercase;
     letter-spacing: 0.5px;
@@ -432,102 +457,53 @@
   }
 
   .strip-code {
-    font-size: 15px;
+    font-size: 17px;
     font-weight: 700;
     font-family: var(--mono);
-    color: var(--blue);
+    color: var(--accent);
     letter-spacing: 3px;
     flex: 1;
     text-align: center;
   }
 
-  .strip-verify {
-    font-size: 9px;
-    color: var(--t3);
-    flex-shrink: 0;
-  }
-
-  /* ── Main view (connected / reconnecting) ── */
+  /* ── Main view ── */
   .main-view {
     display: flex;
     flex-direction: column;
     gap: 10px;
   }
 
-  /* ── Alert row (reconnecting) ── */
-  .alert-row {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 8px 12px;
-    background: var(--amber-bg);
-    border: 1px solid rgba(245,161,48,0.18);
-    border-radius: 8px;
-  }
-
-  .alert-dot {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: var(--amber);
-    flex-shrink: 0;
-  }
-
-  .alert-text {
-    flex: 1;
-    font-size: 12px;
-    color: var(--amber);
-  }
-
-  .retry-btn {
-    background: none;
-    border: 1px solid rgba(245,161,48,0.3);
-    border-radius: 5px;
-    color: var(--amber);
-    font-size: 11px;
-    font-weight: 500;
-    cursor: pointer;
-    padding: 3px 9px;
-    flex-shrink: 0;
-    transition: background 0.12s;
-    display: flex;
-    align-items: center;
-    gap: 5px;
-    min-width: 48px;
-    justify-content: center;
-  }
-  .retry-btn:hover:not(:disabled) { background: rgba(245,161,48,0.12); }
-  .retry-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-
   .tip {
-    font-size: 11px;
+    font-size: 12px;
     color: var(--t3);
     text-align: center;
   }
 
-  /* ── URL debug box ── */
-  .url-box {
-    background: var(--s1);
+  /* ── QR toggle ── */
+  .qr-toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: none;
     border: 1px solid var(--ln);
-    border-radius: 8px;
-    padding: 9px 11px;
-  }
-
-  .url-label {
-    font-size: 11px;
-    color: var(--t3);
-    margin-bottom: 5px;
-  }
-
-  .url-val {
-    font-size: 10px;
+    border-radius: 7px;
     color: var(--t2);
-    font-family: var(--mono);
-    word-break: break-all;
-    display: block;
-    user-select: all;
-    line-height: 1.55;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    padding: 8px 11px;
+    width: 100%;
+    transition: border-color 0.12s, color 0.12s, background 0.12s;
   }
+  .qr-toggle:hover { border-color: var(--ln2); color: var(--t1); background: var(--s1); }
+
+  .chevron {
+    margin-left: auto;
+    transition: transform 0.18s;
+    color: var(--t3);
+    flex-shrink: 0;
+  }
+  .chevron.open { transform: rotate(180deg); }
 
   /* ── Buttons ── */
   .btn-outline {
@@ -537,7 +513,7 @@
     border: 1px solid var(--ln);
     border-radius: 8px;
     color: var(--t2);
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 500;
     cursor: pointer;
     transition: border-color 0.12s, color 0.12s;
@@ -546,35 +522,35 @@
 
   .btn-disconnect {
     width: 100%;
-    padding: 9px 0;
+    padding: 10px 0;
     background: var(--s1);
     border: 1px solid var(--ln);
     border-radius: 8px;
     color: var(--t2);
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 500;
     cursor: pointer;
     transition: all 0.12s;
   }
   .btn-disconnect:hover {
     background: var(--red-bg);
-    border-color: rgba(224,68,68,0.2);
+    border-color: rgba(217,64,64,0.2);
     color: var(--red);
   }
 
-  /* ── Shared global buttons (used by ServerConfig) ── */
+  /* ── Global: primary button (used by ServerConfig) ── */
   :global(.btn-primary) {
     width: 100%;
     padding: 9px 0;
-    background: var(--blue);
+    background: var(--accent);
     border: none;
     border-radius: 8px;
     color: #fff;
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 600;
     cursor: pointer;
     transition: opacity 0.12s;
   }
-  :global(.btn-primary:hover) { opacity: 0.86; }
-  :global(.btn-primary:active) { opacity: 0.75; }
+  :global(.btn-primary:hover)  { opacity: 0.86; }
+  :global(.btn-primary:active) { opacity: 0.74; }
 </style>

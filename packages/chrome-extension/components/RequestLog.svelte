@@ -39,7 +39,7 @@
               class:completed={req.status === 'completed'}
               class:failed={req.status === 'failed'}
             >
-              {req.status === 'pending' ? '...' : req.status === 'completed' ? 'OK' : 'Fail'}
+              {req.status === 'pending' ? '…' : req.status === 'completed' ? 'OK' : 'Fail'}
             </span>
             <span class="time">{timeAgo(req.timestamp)}</span>
           </span>
@@ -51,18 +51,19 @@
 
 <style>
   .log {
-    background: #1e293b;
-    border-radius: 10px;
-    padding: 12px 14px;
+    background: var(--s1);
+    border: 1px solid var(--ln);
+    border-radius: var(--r);
+    padding: 11px 13px;
   }
 
   h3 {
     font-size: 11px;
     text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: #64748b;
+    letter-spacing: 0.06em;
+    color: var(--t3);
     margin-bottom: 8px;
-    font-weight: 500;
+    font-weight: 600;
   }
 
   ul {
@@ -80,7 +81,7 @@
   }
 
   .method {
-    color: #cbd5e1;
+    color: var(--t1);
   }
 
   .meta {
@@ -96,23 +97,12 @@
     border-radius: 4px;
   }
 
-  .status.pending {
-    background: #78350f;
-    color: #fbbf24;
-  }
-
-  .status.completed {
-    background: #064e3b;
-    color: #34d399;
-  }
-
-  .status.failed {
-    background: #7f1d1d;
-    color: #fca5a5;
-  }
+  .status.pending   { background: var(--amber-bg); color: var(--amber); }
+  .status.completed { background: var(--green-bg);  color: var(--green); }
+  .status.failed    { background: var(--red-bg);    color: var(--red);   }
 
   .time {
     font-size: 11px;
-    color: #475569;
+    color: var(--t3);
   }
 </style>

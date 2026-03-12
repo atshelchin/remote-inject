@@ -380,6 +380,9 @@ const app = new Elysia()
           return
         }
 
+        // Tell clients to retry after 2 seconds on disconnect (default is ~3s)
+        controller.enqueue(new TextEncoder().encode('retry: 2000\n\n'))
+
         // 发送 ready 事件
         sendSSE(controller, { type: 'ready' })
 

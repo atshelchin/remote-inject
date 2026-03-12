@@ -630,7 +630,7 @@
 
         updateStatus('loading', t('bridge.connectingApp'), t('bridge.almostDone'))
 
-        await connectSSE()
+        connectSSE()
 
         // Safe Apps Provider may not support event listeners in the same way
         if (selectedProvider.on) {
@@ -663,19 +663,10 @@
     }
 
     // 连接 SSE（服务端推送）+ 用 HTTP POST 发送消息
-    async function connectSSE() {
-      // 先检查 session 是否有效
-      try {
-        const res = await fetch(`/session/${SESSION_ID}`)
-        if (res.status === 404 || res.status === 410) {
-          showError(t('bridge.error'), t('bridge.sessionExpired'))
-          return
-        }
-      } catch (e) {
-        // 网络错误时继续尝试建立 SSE，由 EventSource 处理重连
-        console.log('[Bridge] Session check failed, opening SSE anyway:', e.message)
-      }
-
+    // Session validity is checked implicitly: if session is invalid, EventSource
+    // receives a 4xx response, closes permanently (CLOSED state), and onerror
+    // shows the sessionExpired error — no extra round-trip needed.
+    function connectSSE() {
       if (eventSource) {
         eventSource.close()
         eventSource = null

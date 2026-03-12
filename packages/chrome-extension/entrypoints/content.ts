@@ -7,6 +7,32 @@ export default defineContentScript({
   runAt: 'document_start',
 
   main() {
+    // Theme detection: respond to popup/sidepanel requests for the page's color scheme.
+    // Runs unconditionally so it works on all pages including the relay server's own pages.
+    chrome.runtime.onMessage.addListener((msg: any, _sender, sendResponse) => {
+      if (msg.type !== 'query_page_theme') return
+      function bgLuminance(el: Element | null): number | null {
+        if (!el) return null
+        const bg = getComputedStyle(el).backgroundColor
+        const m = bg.match(/[\d.]+/g)
+        if (!m || m.length < 3) return null
+        const [r, g, b] = m.map(Number)
+        const a = m.length >= 4 ? Number(m[3]) : 1
+        if (a < 0.1) return null
+        return (0.299 * r + 0.587 * g + 0.114 * b) / 255
+      }
+      let theme: 'light' | 'dark' = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+      for (const el of [document.documentElement, document.body]) {
+        const lum = bgLuminance(el)
+        if (lum != null && lum > 0.02 && lum < 0.98) {
+          theme = lum > 0.5 ? 'light' : 'dark'
+          break
+        }
+      }
+      sendResponse({ theme })
+      return true
+    })
+
     // Don't inject on the bridge server's own pages (bridge, landing, demo).
     // When the extension has cached accounts, injected.ts sets window.ethereum with
     // selectedAddress already populated, causing MetaMask/OKX to skip their auth popups

@@ -4,6 +4,9 @@
  * Communicates with the content script via window.postMessage.
  */
 
+// @ts-ignore — Vite ?inline returns a base64 data URI at build time
+import iconDataUrl from '../assets/icon.png?inline'
+
 const SOURCE_INJECTED = 'remote-inject-injected'
 const SOURCE_CONTENT = 'remote-inject-content'
 
@@ -455,12 +458,10 @@ export default defineUnlistedScript(() => {
 
   // ---- EIP-6963 (deferred until state is ready) ----
 
-  const ICON_SVG = `data:image/svg+xml;base64,${btoa('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none"><rect width="128" height="128" rx="24" fill="#3b82f6"/><path d="M40 48h48M40 64h48M40 80h32" stroke="#fff" stroke-width="8" stroke-linecap="round"/><circle cx="88" cy="80" r="16" fill="#22c55e"/><path d="M82 80l4 4 8-8" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>')}`
-
   const providerInfo = Object.freeze({
     uuid: 'f81d4fae-7dec-11d0-a765-00a0c91e6bf6',
     name: 'Remote Inject Bridge',
-    icon: ICON_SVG,
+    icon: iconDataUrl as string,
     rdns: 'com.remote-inject.bridge',
   })
 

@@ -1,5 +1,5 @@
 export const PORT_NAME_CONTENT = 'remote-inject-content'
-export const DEFAULT_SERVER_URL = 'http://localhost:3700'
+export const DEFAULT_SERVER_URL = 'https://remote-inject.awesometools.dev'
 export const REQUEST_TIMEOUT_MS = 60_000
 export const MAX_REQUEST_LOG = 50
 

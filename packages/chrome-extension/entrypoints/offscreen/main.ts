@@ -245,18 +245,11 @@ async function handleResume(serverUrl: string, sessionId: string, sessionUrl: st
 
     await provider.resumeSession({ serverUrl, sessionId, sessionUrl })
 
-    // resumeSession resolves on 'ready' but isConnected is still false
-    // until the 'connect' message arrives. Wait for it.
-    const connected = await waitForConnect(5000)
-    if (connected) {
-      broadcastState()
-    } else {
-      // Resume means user already scanned QR before — show reconnecting, not waiting
-      sendToBackground({
-        type: 'state_update',
-        state: { status: 'reconnecting', sessionId, sessionUrl } as OffscreenProviderState,
-      })
-    }
+    // SSE is up. broadcastState() will reflect 'connected' if the server pushed
+    // cached walletInfo (connect event), or 'reconnecting' if wallet is offline.
+    // The global provider.on('connect') listener handles the transition once
+    // wallet data arrives — no need to block here.
+    broadcastState()
   } catch (err: any) {
     console.log('[offscreen] Resume failed:', err.message)
 
