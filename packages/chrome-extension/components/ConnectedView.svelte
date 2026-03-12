@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { t } from '../lib/i18n'
+
   let { account, chainId, sessionId, dim = false }:
     { account: string; chainId: string; sessionId?: string; dim?: boolean } = $props()
 
@@ -40,7 +42,7 @@
       </button>
       <span class="chain">{chainName}</span>
     </div>
-    <button class="copy-btn" onclick={copyAddress} title={copied ? 'Copied!' : 'Copy address'}>
+    <button class="copy-btn" onclick={copyAddress} title={copied ? t('btn.copied') : t('btn.copy_address')}>
       {#if copied}
         <svg width="13" height="13" viewBox="0 0 14 14" fill="none">
           <path d="M2 7l3.5 3.5 6.5-7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
@@ -57,7 +59,7 @@
   {#if sessionId}
     <div class="divider"></div>
     <div class="session-row">
-      <span class="session-key">Session</span>
+      <span class="session-key">{t('session')}</span>
       <span class="session-val">{sessionId}</span>
     </div>
   {/if}

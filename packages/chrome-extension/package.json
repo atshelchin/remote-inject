@@ -10,6 +10,7 @@
     "clean": "rm -rf .output .wxt dist"
   },
   "dependencies": {
+    "@shelchin/i18n-sveltekit": "^0.1.0",
     "@shelchin/remote-inject-sdk": "workspace:*",
     "qrcode": "^1.5.4"
   },

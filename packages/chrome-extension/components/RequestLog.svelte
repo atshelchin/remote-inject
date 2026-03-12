@@ -1,33 +1,35 @@
 <script lang="ts">
   import type { RequestLogEntry } from '../lib/types'
+  import { t } from '../lib/i18n'
 
   let { requests = [] }: { requests: RequestLogEntry[] } = $props()
 
-  const METHOD_LABELS: Record<string, string> = {
-    personal_sign: 'Sign Message',
-    eth_signTypedData_v4: 'Sign Typed Data',
-    eth_sendTransaction: 'Send Transaction',
-    eth_requestAccounts: 'Request Accounts',
-    wallet_switchEthereumChain: 'Switch Chain',
-    wallet_addEthereumChain: 'Add Chain',
-    eth_sign: 'Sign',
+  const METHOD_KEYS: Record<string, string> = {
+    personal_sign: 'method.personal_sign',
+    eth_signTypedData_v4: 'method.eth_signTypedData_v4',
+    eth_sendTransaction: 'method.eth_sendTransaction',
+    eth_requestAccounts: 'method.eth_requestAccounts',
+    wallet_switchEthereumChain: 'method.wallet_switchEthereumChain',
+    wallet_addEthereumChain: 'method.wallet_addEthereumChain',
+    eth_sign: 'method.eth_sign',
   }
 
   function label(method: string): string {
-    return METHOD_LABELS[method] || method
+    const key = METHOD_KEYS[method]
+    return key ? t(key) : method
   }
 
   function timeAgo(ts: number): string {
     const sec = Math.floor((Date.now() - ts) / 1000)
-    if (sec < 60) return `${sec}s ago`
+    if (sec < 60) return t('time.s_ago', { n: sec })
     const min = Math.floor(sec / 60)
-    return `${min}m ago`
+    return t('time.m_ago', { n: min })
   }
 </script>
 
 {#if requests.length > 0}
   <div class="log">
-    <h3>Activity</h3>
+    <h3>{t('activity')}</h3>
     <ul>
       {#each requests.slice(0, 10) as req (req.id)}
         <li>
@@ -39,7 +41,7 @@
               class:completed={req.status === 'completed'}
               class:failed={req.status === 'failed'}
             >
-              {req.status === 'pending' ? '…' : req.status === 'completed' ? 'OK' : 'Fail'}
+              {req.status === 'pending' ? '…' : req.status === 'completed' ? t('status.ok') : t('status.fail')}
             </span>
             <span class="time">{timeAgo(req.timestamp)}</span>
           </span>

@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { t } from '../lib/i18n'
+
   let { serverUrl = 'https://remote-inject.awesometools.dev', onConnect }:
     { serverUrl: string; onConnect: (url: string) => void } = $props()
 
@@ -31,7 +33,7 @@
       required
     />
   </div>
-  <button type="submit" class="btn-primary">Connect</button>
+  <button type="submit" class="btn-primary">{t('btn.connect')}</button>
 </form>
 
 <style>

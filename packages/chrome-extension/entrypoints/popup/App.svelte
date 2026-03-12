@@ -2,6 +2,7 @@
   import { onMount } from 'svelte'
   import type { ExtensionState } from '../../lib/types'
   import { DEFAULT_SERVER_URL } from '../../lib/constants'
+  import { t } from '../../lib/i18n'
   import ServerConfig from '../../components/ServerConfig.svelte'
   import QRCode from '../../components/QRCode.svelte'
   import ConnectedView from '../../components/ConnectedView.svelte'
@@ -88,11 +89,11 @@
   }
 
   let statusLabel = $derived(
-    state.status === 'connected'      ? 'Connected'
-    : state.status === 'waiting'      ? 'Waiting'
-    : state.status === 'connecting'   ? 'Connecting'
-    : state.status === 'reconnecting' ? 'Reconnecting'
-    : 'Offline'
+    state.status === 'connected'      ? t('status.connected')
+    : state.status === 'waiting'      ? t('status.waiting')
+    : state.status === 'connecting'   ? t('status.connecting')
+    : state.status === 'reconnecting' ? t('status.reconnecting')
+    : t('status.offline')
   )
 
 </script>
@@ -106,13 +107,13 @@
     {/if}
     <div class="header-right">
       {#if sidepanel}
-        <button class="icon-btn" onclick={closeSidepanel} title="Close side panel">
+        <button class="icon-btn" onclick={closeSidepanel} title={t('btn.close_sidepanel')}>
           <svg width="13" height="13" viewBox="0 0 14 14" fill="none">
             <path d="M1 1l12 12M13 1L1 13" stroke="currentColor" stroke-width="1.35" stroke-linecap="round"/>
           </svg>
         </button>
       {:else}
-        <button class="icon-btn" onclick={openSidepanel} title="Open in side panel">
+        <button class="icon-btn" onclick={openSidepanel} title={t('btn.open_sidepanel')}>
           <svg width="13" height="13" viewBox="0 0 14 14" fill="none">
             <rect x="0.65" y="0.65" width="12.7" height="12.7" rx="2" stroke="currentColor" stroke-width="1.3"/>
             <line x1="9" y1="0.65" x2="9" y2="13.35" stroke="currentColor" stroke-width="1.3"/>
@@ -143,7 +144,7 @@
   <!-- ── Disconnected ── -->
   {#if state.status === 'disconnected'}
     <div class="setup-view">
-      <p class="setup-desc">Bridge any DApp to your mobile wallet via a relay server.</p>
+      <p class="setup-desc">{t('desc')}</p>
       <ServerConfig serverUrl={state.serverUrl} onConnect={connect} />
     </div>
 
@@ -151,23 +152,23 @@
   {:else if state.status === 'connecting'}
     <div class="center-view">
       <span class="ring"></span>
-      <span class="state-text">Connecting…</span>
+      <span class="state-text">{t('status.connecting')}…</span>
     </div>
 
   <!-- ── Waiting for scan ── -->
   {:else if state.status === 'waiting'}
     <div class="qr-view">
-      <p class="qr-hint">Open in your mobile wallet's DApp browser</p>
+      <p class="qr-hint">{t('qr.hint')}</p>
       {#if state.sessionUrl}
         <QRCode url={state.sessionUrl} {theme} />
       {/if}
       {#if state.sessionId}
         <div class="session-strip">
-          <span class="strip-label">Session</span>
+          <span class="strip-label">{t('session')}</span>
           <span class="strip-code">{state.sessionId}</span>
         </div>
       {/if}
-      <button class="btn-outline" onclick={disconnect}>Cancel</button>
+      <button class="btn-outline" onclick={disconnect}>{t('btn.cancel')}</button>
     </div>
 
   <!-- ── Reconnecting ── -->
@@ -177,22 +178,22 @@
       <div class="main-view">
         <ConnectedView account={state.account} chainId={state.chainId ?? '0x1'} sessionId={state.sessionId} />
         <RequestLog requests={state.requests} />
-        <button class="btn-disconnect" onclick={disconnect}>Disconnect</button>
+        <button class="btn-disconnect" onclick={disconnect}>{t('btn.disconnect')}</button>
       </div>
     {:else}
       <!-- No wallet data yet — show QR so wallet can connect -->
       <div class="qr-view">
-        <p class="qr-hint">Open in your mobile wallet's DApp browser</p>
+        <p class="qr-hint">{t('qr.hint')}</p>
         {#if state.sessionUrl}
           <QRCode url={state.sessionUrl} {theme} />
         {/if}
         {#if state.sessionId}
           <div class="session-strip">
-            <span class="strip-label">Session</span>
+            <span class="strip-label">{t('session')}</span>
             <span class="strip-code">{state.sessionId}</span>
           </div>
         {/if}
-        <button class="btn-outline" onclick={disconnect}>Cancel</button>
+        <button class="btn-outline" onclick={disconnect}>{t('btn.cancel')}</button>
       </div>
     {/if}
 
@@ -206,7 +207,7 @@
             <path d="M2 3h3v3H2zM7 3h3v3H7zM2 7h3v3H2z" stroke="currentColor" stroke-width="1.1"/>
             <path d="M8 7h.5M9.5 7H10M8 8.5v.5M8 10v.5M10 8.5v.5M10 10v.5M9.5 9h.5" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/>
           </svg>
-          {showQR ? 'Hide QR' : 'Show QR code'}
+          {showQR ? t('qr.hide') : t('qr.show')}
           <svg class="chevron" class:open={showQR} width="10" height="10" viewBox="0 0 10 10" fill="none">
             <path d="M2 3.5l3 3 3-3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
@@ -218,7 +219,7 @@
         {/if}
       {/if}
       <RequestLog requests={state.requests} />
-      <button class="btn-disconnect" onclick={disconnect}>Disconnect</button>
+      <button class="btn-disconnect" onclick={disconnect}>{t('btn.disconnect')}</button>
     </div>
   {/if}
 </div>
