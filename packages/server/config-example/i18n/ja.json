@@ -19,6 +19,7 @@
   "bridge.connecting": "接続中...",
   "bridge.connected": "接続済み",
   "bridge.disconnect": "切断",
+  "bridge.confirmDisconnect": "もう一度タップして確認",
   "bridge.keepOpen": "接続を維持するためにこのページを開いたままにしてください",
 
   "demo.title": "Remote Inject デモ",

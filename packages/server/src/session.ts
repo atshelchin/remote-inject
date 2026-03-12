@@ -27,6 +27,16 @@ export function sendSSE(controller: SSEController, data: object): void {
   }
 }
 
+// 向 SSE 流发送心跳注释（保持连接活跃，防止 WebView/代理关闭空闲连接）
+// SSE 注释以 : 开头，EventSource 会忽略，但 TCP 连接保持活跃
+function sendHeartbeat(controller: SSEController): void {
+  try {
+    controller.enqueue(encoder.encode(':\n\n'))
+  } catch {
+    // 控制器可能已关闭
+  }
+}
+
 // 关闭 SSE 流
 function closeSSE(controller: SSEController): void {
   try {
@@ -62,7 +72,6 @@ const SECRET_LENGTH = 16    // 16 位密钥，用于防止暴力枚举
 const CREDENTIAL_TIMEOUT = parseInt(process.env.SESSION_CREDENTIAL_TTL || '31536000', 10) * 1000  // 证书 TTL：1 年（session ID + secret 保持有效，无需重新扫码）
 const STATE_PENDING_TIMEOUT = parseInt(process.env.SESSION_PENDING_TTL || '300', 10) * 1000       // 状态 TTL（等待连接）：5 分钟
 const STATE_CONNECTED_TIMEOUT = parseInt(process.env.SESSION_CONNECTED_TTL || '604800', 10) * 1000 // 状态 TTL（已连接）：7 天
-const IDLE_TIMEOUT = parseInt(process.env.SESSION_IDLE_TTL || '3600', 10) * 1000                  // 状态 TTL（双方断开）：1 小时
 
 // 容量限制（可通过环境变量配置）
 const MAX_SESSIONS = parseInt(process.env.MAX_SESSIONS || '10000', 10)
@@ -230,14 +239,8 @@ export function unregisterConnection(
 
   session.status = 'disconnected'
 
-  // 双方都断开后，缩短状态 TTL（IDLE_TIMEOUT = 1 小时）
-  // 到期后仅清除 walletInfo，session 证书（ID + secret）仍保留 1 年，用户无需重新扫码
-  if (!session.dapp && !session.mobile) {
-    const idleExpiry = Date.now() + IDLE_TIMEOUT
-    if (idleExpiry < session.stateExpiresAt) {
-      session.stateExpiresAt = idleExpiry
-    }
-  }
+  // 双方断开后不缩短 stateExpiresAt — 保留 walletInfo 缓存直到原有的 7 天过期
+  // 这样用户刷新页面即可重连，无需重新扫码
 }
 
 // Session ID 回收延迟（给客户端时间看到 410 状态）
@@ -361,7 +364,17 @@ export function cleanupExpiredSessions(): void {
   }
 }
 
-// 启动定期清理
+// 向所有活跃 SSE 连接发送心跳（防止 WebView/代理关闭空闲连接）
+function broadcastHeartbeat(): void {
+  for (const session of sessions.values()) {
+    if (session.dapp) sendHeartbeat(session.dapp)
+    if (session.mobile) sendHeartbeat(session.mobile)
+  }
+}
+
+// 启动定期清理 + 心跳
 export function startCleanupInterval(intervalMs = 60000): void {
   setInterval(cleanupExpiredSessions, intervalMs)
+  // 每 25 秒发送心跳，低于大多数代理/负载均衡器的 30-60 秒空闲超时
+  setInterval(broadcastHeartbeat, 25000)
 }

@@ -130,6 +130,24 @@ provider.on('disconnect', (info: any) => {
     return
   }
 
+  if (info?.code === 4901) {
+    // Max reconnect attempts reached — SDK closed EventSource.
+    // Stay in 'reconnecting' status (preserve cached accounts for DApps),
+    // but the popup will show the user can manually retry.
+    // On-demand reconnection via ensureConnected() still works when DApps make requests.
+    console.log('[offscreen] Max reconnect attempts reached, waiting for manual retry or on-demand reconnect')
+    sendToBackground({
+      type: 'state_update',
+      state: {
+        status: 'reconnecting',
+        sessionId: lastSessionId,
+        sessionUrl: lastSessionUrl,
+        error: 'max_retries',
+      } as OffscreenProviderState,
+    })
+    return
+  }
+
   // Transient disconnect (SSE drop) — DON'T send disconnect event to DApps.
   // Sending disconnect would clear accounts in injected.ts, causing DApps to restart
   // auth flows and trigger /nonce 409 errors. Instead, just update status to

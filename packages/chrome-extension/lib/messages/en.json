@@ -11,6 +11,8 @@
   "qr.hide": "Hide QR",
   "btn.cancel": "Cancel",
   "btn.disconnect": "Disconnect",
+  "btn.reconnect": "Reconnect",
+  "status.connectionLost": "Connection lost, please reconnect manually",
   "btn.connect": "Connect",
   "btn.copied": "Copied!",
   "btn.copy_address": "Copy address",

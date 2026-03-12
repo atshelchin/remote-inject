@@ -11,6 +11,8 @@
   "qr.hide": "隐藏二维码",
   "btn.cancel": "取消",
   "btn.disconnect": "断开连接",
+  "btn.reconnect": "重新连接",
+  "status.connectionLost": "连接已断开，请手动重连",
   "btn.connect": "连接",
   "btn.copied": "已复制！",
   "btn.copy_address": "复制地址",

@@ -82,9 +82,29 @@
       margin-bottom: 16px;
     }
 
-    /* Buttons */
-    .btn {
+    /* Disconnect link */
+    .disconnect-link {
+      margin-top: 12px;
+      font-size: 12px;
+      color: var(--color-text-muted);
+      cursor: pointer;
+      text-align: center;
+      transition: color 0.2s;
+    }
+
+    .disconnect-link:hover {
+      color: var(--color-text-secondary);
+    }
+
+    .disconnect-link.confirming {
+      color: var(--color-error);
+      font-weight: 600;
+    }
+
+    /* Reconnect button */
+    #reconnectBtn {
       width: 100%;
+      margin-top: 12px;
     }
 
     /* Hint text */
@@ -178,16 +198,21 @@
         </div>
       </div>
 
-      <!-- Disconnect button -->
-      <button class="btn btn-disconnect hidden" id="disconnectBtn" onclick="disconnect()">
-        <%= it.t('bridge.disconnect') %>
+      <!-- Disconnect link -->
+      <div class="disconnect-link hidden" id="disconnectBtn" onclick="confirmDisconnect()">
+        <span id="disconnectText"><%= it.t('bridge.disconnect') %></span>
+      </div>
+
+      <!-- Manual reconnect button (shown after auto-reconnect gives up) -->
+      <button class="btn btn-primary hidden" id="reconnectBtn" onclick="manualReconnect()">
+        <%= it.t('bridge.reconnectBtn') %>
       </button>
 
       <div class="hint" id="hint"><%= it.t('bridge.keepOpen') %></div>
       <div class="session-indicator">
-        <span class="session-indicator-label">Session</span>
+        <span class="session-indicator-label"><%= it.t('bridge.session') %></span>
         <span class="session-indicator-id"><%= it.sessionId %></span>
-        <span class="session-indicator-hint"><%= it.locale === 'zh' ? '请确认 DApp 端显示相同 ID' : 'Verify DApp shows same ID' %></span>
+        <span class="session-indicator-hint"><%= it.t('bridge.sessionHint') %></span>
       </div>
     </div>
   </div>
@@ -334,6 +359,9 @@
     let providerName = null
     let userInitiatedDisconnect = false
     let connectSent = false  // 只在首次 ready 时发送 connect，SSE 重连时服务端自动从缓存推送
+    let reconnectUiTimer = null // 延迟显示重连 UI，避免短暂断开时闪烁
+    let consecutiveErrors = 0   // 连续 SSE 错误计数
+    const MAX_RETRY_ERRORS = 15 // 约 30 秒（EventSource 每 2 秒重试一次）后放弃自动重连
 
     // 通过 HTTP POST 向 DApp 发送消息（替代 WebSocket ws.send）
     // 注意：不能命名为 postMessage，否则会覆盖 window.postMessage，导致 MetaMask/OKX 等钱包通信失效
@@ -566,6 +594,24 @@
       return CHAIN_NAMES[chainId] || `Chain ${chainId}`
     }
 
+    // Confirm disconnect (two-step)
+    let disconnectTimer = null
+    function confirmDisconnect() {
+      const el = document.getElementById('disconnectBtn')
+      const textEl = document.getElementById('disconnectText')
+      if (el.classList.contains('confirming')) {
+        clearTimeout(disconnectTimer)
+        disconnect()
+        return
+      }
+      el.classList.add('confirming')
+      textEl.textContent = t('bridge.confirmDisconnect')
+      disconnectTimer = setTimeout(() => {
+        el.classList.remove('confirming')
+        textEl.textContent = t('bridge.disconnect')
+      }, 3000)
+    }
+
     // Disconnect
     function disconnect() {
       userInitiatedDisconnect = true
@@ -577,6 +623,14 @@
         }
       })
       showError(t('bridge.disconnected'), t('bridge.userDisconnected'))
+    }
+
+    // Manual reconnect (after auto-reconnect gives up)
+    function manualReconnect() {
+      consecutiveErrors = 0
+      document.getElementById('reconnectBtn').classList.add('hidden')
+      updateStatus('loading', t('bridge.reconnecting', { attempt: '', maxAttempts: '' }), t('bridge.pleaseWait'))
+      connectSSE()
     }
 
     // Initialize
@@ -681,6 +735,11 @@
 
           switch (message.type) {
             case 'ready':
+              // SSE 恢复连接 — 重置计数器和计时器
+              clearTimeout(reconnectUiTimer)
+              reconnectUiTimer = null
+              consecutiveErrors = 0
+              document.getElementById('reconnectBtn').classList.add('hidden')
               // SSE 已就绪：首次发送 connect；SSE 重连时服务端会从缓存自动推送，无需重发
               if (!connectSent) {
                 console.log('[Bridge] SSE connected, sending connect')
@@ -733,12 +792,33 @@
 
         if (eventSource.readyState === EventSource.CLOSED) {
           // 永久关闭（session 过期或服务端拒绝）
+          clearTimeout(reconnectUiTimer)
           console.log('[Bridge] SSE permanently closed')
           showError(t('bridge.error'), t('bridge.sessionExpired'))
         } else {
           // CONNECTING — EventSource 正在自动重连
-          console.log('[Bridge] SSE disconnected, auto-reconnecting...')
-          updateStatus('loading', t('bridge.reconnecting', { attempt: '', maxAttempts: '' }), t('bridge.networkDisconnected'))
+          consecutiveErrors++
+          console.log('[Bridge] SSE error #' + consecutiveErrors + '/' + MAX_RETRY_ERRORS)
+
+          if (consecutiveErrors >= MAX_RETRY_ERRORS) {
+            // 超过最大重试次数 — 停止自动重连，显示手动重连按钮
+            clearTimeout(reconnectUiTimer)
+            reconnectUiTimer = null
+            eventSource.close()
+            eventSource = null
+            console.log('[Bridge] Max retries reached, showing manual reconnect button')
+            updateStatus('connected', t('bridge.connectionLost'), t('bridge.manualReconnectHint'))
+            document.getElementById('reconnectBtn').classList.remove('hidden')
+            document.getElementById('disconnectBtn').classList.add('hidden')
+          } else if (!reconnectUiTimer) {
+            // 延迟显示重连 UI，短暂断开（<6s）时保持当前状态不变，避免闪烁
+            reconnectUiTimer = setTimeout(() => {
+              reconnectUiTimer = null
+              if (eventSource && eventSource.readyState !== EventSource.OPEN && !userInitiatedDisconnect) {
+                updateStatus('loading', t('bridge.reconnecting', { attempt: '', maxAttempts: '' }), t('bridge.networkDisconnected'))
+              }
+            }, 6000)
+          }
         }
       }
     }

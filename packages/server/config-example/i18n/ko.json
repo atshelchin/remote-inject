@@ -22,5 +22,6 @@
   "bridge.connecting": "ko 接続中...",
   "bridge.connected": "ko 接続済み",
   "bridge.disconnect": "ko 切断",
+  "bridge.confirmDisconnect": "ko もう一度タップして確認",
   "bridge.keepOpen": "ko 接続を維持するためにこのページを開いたままにしてください"
 }

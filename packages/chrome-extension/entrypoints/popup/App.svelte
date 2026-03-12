@@ -89,6 +89,11 @@
     chrome.runtime.sendMessage({ type: 'popup_disconnect' })
   }
 
+  function reconnect() {
+    error = ''
+    chrome.runtime.sendMessage({ type: 'popup_reconnect' })
+  }
+
   async function openSidepanel() {
     const [tab] = await new Promise<chrome.tabs.Tab[]>((resolve) =>
       chrome.tabs.query({ active: true, currentWindow: true }, resolve)
@@ -195,6 +200,10 @@
       <!-- SSE dropped but walletInfo is cached — show as connected, reconnects automatically -->
       <div class="main-view">
         <ConnectedView account={state.account} chainId={state.chainId ?? '0x1'} sessionId={state.sessionId} />
+        {#if state.error === 'max_retries'}
+          <p class="reconnect-hint">{t('status.connectionLost')}</p>
+          <button class="btn-primary" onclick={reconnect}>{t('btn.reconnect')}</button>
+        {/if}
         <RequestLog requests={state.requests} />
         <button class="btn-disconnect" onclick={disconnect}>{t('btn.disconnect')}</button>
       </div>
@@ -586,4 +595,11 @@
   }
   :global(.btn-primary:hover)  { opacity: 0.86; }
   :global(.btn-primary:active) { opacity: 0.74; }
+
+  .reconnect-hint {
+    font-size: 12px;
+    color: var(--t3);
+    text-align: center;
+    margin: 8px 0 4px;
+  }
 </style>

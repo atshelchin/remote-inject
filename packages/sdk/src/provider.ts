@@ -44,6 +44,7 @@ interface PendingRequest {
 }
 
 const REQUEST_TIMEOUT = 60000 // 60 秒
+const MAX_CONSECUTIVE_ERRORS = 15 // 约 30 秒后放弃自动重连
 
 export class RemoteProvider {
   private eventSource: EventSource | null = null
@@ -53,6 +54,7 @@ export class RemoteProvider {
   private requestId: number = 0
   private pendingRequests: Map<number, PendingRequest> = new Map()
   private eventListeners: Map<EventType, Set<EventListener>> = new Map()
+  private consecutiveErrors: number = 0
 
   private _chainId: string = '0x1'
   private _accounts: string[] = []
@@ -164,6 +166,7 @@ export class RemoteProvider {
       }, 10000)
 
       es.onmessage = (event) => {
+        this.consecutiveErrors = 0 // 收到任何消息即重置错误计数
         this.handleMessage(event.data)
         if (!resolved) {
           try {
@@ -191,8 +194,17 @@ export class RemoteProvider {
           this._connected = false
           this.emit('disconnect', { code: 4900, message: 'Connection closed', userInitiated: false } as DisconnectInfo)
         } else if (es.readyState === EventSource.CONNECTING) {
-          // 短暂断开，EventSource 自动重连中
-          this.emit('reconnecting', { attempt: -1, maxAttempts: -1 } as ReconnectInfo)
+          this.consecutiveErrors++
+          if (this.consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
+            // 超过最大重试次数 — 停止自动重连
+            es.close()
+            this.eventSource = null
+            this._connected = false
+            this.emit('disconnect', { code: 4901, message: 'Max reconnect attempts reached', userInitiated: false } as DisconnectInfo)
+          } else {
+            // 短暂断开，EventSource 自动重连中
+            this.emit('reconnecting', { attempt: this.consecutiveErrors, maxAttempts: MAX_CONSECUTIVE_ERRORS } as ReconnectInfo)
+          }
         }
       }
     })
