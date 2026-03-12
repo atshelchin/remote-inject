@@ -97,7 +97,7 @@ export default defineBackground(() => {
     tabPorts.set(tabId, port)
 
     // Send current state to newly connected tab
-    // During reconnecting, DApps still see cached accounts (WS will reconnect on-demand)
+    // During reconnecting, DApps still see cached accounts (SSE will reconnect on-demand)
     getState().then((state) => {
       const dappConnected = (state.status === 'connected' || state.status === 'reconnecting') && !!state.account
       port.postMessage({

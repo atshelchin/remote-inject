@@ -296,7 +296,8 @@
     let connectSent = false  // 只在首次 ready 时发送 connect，SSE 重连时服务端自动从缓存推送
 
     // 通过 HTTP POST 向 DApp 发送消息（替代 WebSocket ws.send）
-    function postMessage(data) {
+    // 注意：不能命名为 postMessage，否则会覆盖 window.postMessage，导致 MetaMask/OKX 等钱包通信失效
+    function relayPost(data) {
       return fetch(`/message?session=${SESSION_ID}&role=mobile&k=${SECRET}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -529,7 +530,7 @@
     function disconnect() {
       userInitiatedDisconnect = true
       connectSent = false
-      postMessage({ type: 'disconnect', reason: 'User initiated' }).finally(() => {
+      relayPost({ type: 'disconnect', reason: 'User initiated' }).finally(() => {
         if (eventSource) {
           eventSource.close()
           eventSource = null
@@ -598,7 +599,7 @@
             document.getElementById('walletNetwork').textContent = getChainName(currentChainId)
             // 只在初始 connect 已发送后才转发变更（避免初始化时 MetaMask 发出的噪声事件）
             if (connectSent) {
-              postMessage({ type: 'chainChanged', chainId: currentChainId })
+              relayPost({ type: 'chainChanged', chainId: currentChainId })
             }
           })
 
@@ -611,7 +612,7 @@
             document.getElementById('walletAddress').textContent = formatAddress(currentAddress)
             // 只在初始 connect 已发送后才转发变更
             if (connectSent) {
-              postMessage({ type: 'accountsChanged', accounts })
+              relayPost({ type: 'accountsChanged', accounts })
             }
           })
         }
@@ -652,7 +653,7 @@
               // SSE 已就绪：首次发送 connect；SSE 重连时服务端会从缓存自动推送，无需重发
               if (!connectSent) {
                 console.log('[Bridge] SSE connected, sending connect')
-                postMessage({
+                relayPost({
                   type: 'connect',
                   address: currentAddress,
                   chainId: currentChainId,
@@ -817,10 +818,10 @@
         } else {
           console.log('[Bridge]', method, '→', result)
         }
-        postMessage({ type: 'response', id, result })
+        relayPost({ type: 'response', id, result })
       } catch (error) {
         console.warn('[Bridge]', method, '→ error:', error.code, error.message)
-        postMessage({
+        relayPost({
           type: 'response',
           id,
           error: { code: error.code || -32603, message: error.message || 'Unknown error' },

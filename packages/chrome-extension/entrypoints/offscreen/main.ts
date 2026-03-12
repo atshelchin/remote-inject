@@ -16,8 +16,9 @@ let lastSessionUrl = ''
 let reconnectPromise: Promise<boolean> | null = null
 
 // ------- Wait for connect event -------
-// SDK's resumeSession() resolves on 'ready' WS message, but provider.isConnected
+// SDK's resumeSession() resolves on 'ready' SSE event, but provider.isConnected
 // is only set to true when the 'connect' message arrives (with account/chain data).
+// On reconnect, the server pushes 'connect' from cached walletInfo immediately after 'ready'.
 // This helper waits for that connect event with a timeout.
 
 function waitForConnect(timeoutMs = 5000): Promise<boolean> {
