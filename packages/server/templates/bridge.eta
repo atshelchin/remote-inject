@@ -791,10 +791,29 @@
         if (document.getElementById('mainView').classList.contains('hidden')) return
 
         if (eventSource.readyState === EventSource.CLOSED) {
-          // 永久关闭（session 过期或服务端拒绝）
+          // 永久关闭 — 可能是 session 过期、服务器重启、或网络不可达
+          // 先验证 session 是否还存在，再决定是否可重连
           clearTimeout(reconnectUiTimer)
-          console.log('[Bridge] SSE permanently closed')
-          showError(t('bridge.error'), t('bridge.sessionExpired'))
+          reconnectUiTimer = null
+          console.log('[Bridge] SSE permanently closed, checking session...')
+          fetch('/session/' + SESSION_ID).then(resp => {
+            if (resp.ok) {
+              // Session 还在，SSE 因其他原因关闭（如密钥错误、并发连接） — 可重连
+              console.log('[Bridge] Session still valid, showing reconnect button')
+              updateStatus('connected', t('bridge.connectionLost'), t('bridge.manualReconnectHint'))
+              document.getElementById('reconnectBtn').classList.remove('hidden')
+              document.getElementById('disconnectBtn').classList.add('hidden')
+            } else {
+              // Session 真的不存在了（服务器重启或过期）
+              showError(t('bridge.error'), t('bridge.sessionExpired'))
+            }
+          }).catch(() => {
+            // 网络不可达 — 服务器可能暂时挂了，允许用户手动重试
+            console.log('[Bridge] Server unreachable, showing reconnect button')
+            updateStatus('connected', t('bridge.connectionLost'), t('bridge.manualReconnectHint'))
+            document.getElementById('reconnectBtn').classList.remove('hidden')
+            document.getElementById('disconnectBtn').classList.add('hidden')
+          })
         } else {
           // CONNECTING — EventSource 正在自动重连
           consecutiveErrors++
