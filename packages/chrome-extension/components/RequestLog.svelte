@@ -4,19 +4,20 @@
 
   let { requests = [] }: { requests: RequestLogEntry[] } = $props()
 
-  const METHOD_KEYS: Record<string, string> = {
-    personal_sign: 'method.personal_sign',
-    eth_signTypedData_v4: 'method.eth_signTypedData_v4',
-    eth_sendTransaction: 'method.eth_sendTransaction',
-    eth_requestAccounts: 'method.eth_requestAccounts',
-    wallet_switchEthereumChain: 'method.wallet_switchEthereumChain',
-    wallet_addEthereumChain: 'method.wallet_addEthereumChain',
-    eth_sign: 'method.eth_sign',
+  // Method names are always shown in English regardless of locale —
+  // they are technical identifiers, not user-facing descriptions.
+  const METHOD_LABELS: Record<string, string> = {
+    personal_sign: 'Sign Message',
+    eth_signTypedData_v4: 'Sign Typed Data',
+    eth_sendTransaction: 'Send Transaction',
+    eth_requestAccounts: 'Request Accounts',
+    wallet_switchEthereumChain: 'Switch Chain',
+    wallet_addEthereumChain: 'Add Chain',
+    eth_sign: 'Sign',
   }
 
   function label(method: string): string {
-    const key = METHOD_KEYS[method]
-    return key ? t(key) : method
+    return METHOD_LABELS[method] || method
   }
 
   function timeAgo(ts: number): string {

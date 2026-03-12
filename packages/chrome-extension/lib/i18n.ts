@@ -20,3 +20,7 @@ export function setLocale(locale: Locale) {
   i18nState.locale = locale
   i18nState.setMessages(MESSAGES[locale])
 }
+
+export function getLocale(): Locale {
+  return (i18nState.locale as Locale) || initial
+}

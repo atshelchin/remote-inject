@@ -1,6 +1,7 @@
 <script lang="ts">
   import QRCodeLib from 'qrcode'
   import { onMount } from 'svelte'
+  import { t } from '../lib/i18n'
 
   let { url, theme = 'dark' }: { url: string; theme?: 'light' | 'dark' } = $props()
 
@@ -36,13 +37,13 @@
       <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
         <path d="M1.5 6l3 3 6-6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
-      Copied
+      {t('btn.copied')}
     {:else}
       <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
         <path d="M4 2H2a1 1 0 0 0-1 1v7a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V3a1 1 0 0 0-1-1h-2" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
         <rect x="4" y="1" width="4" height="2.5" rx="0.8" stroke="currentColor" stroke-width="1.2"/>
       </svg>
-      Copy link
+      {t('btn.copy_link')}
     {/if}
   </button>
 </div>

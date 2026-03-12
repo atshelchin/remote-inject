@@ -14,6 +14,7 @@
   "btn.connect": "Connect",
   "btn.copied": "Copied!",
   "btn.copy_address": "Copy address",
+  "btn.copy_link": "Copy link",
   "btn.open_sidepanel": "Open in side panel",
   "btn.close_sidepanel": "Close side panel",
   "session": "Session",

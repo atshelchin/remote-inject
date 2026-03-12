@@ -2,7 +2,7 @@
   import { onMount } from 'svelte'
   import type { ExtensionState } from '../../lib/types'
   import { DEFAULT_SERVER_URL } from '../../lib/constants'
-  import { t } from '../../lib/i18n'
+  import { t, setLocale, getLocale } from '../../lib/i18n'
   import ServerConfig from '../../components/ServerConfig.svelte'
   import QRCode from '../../components/QRCode.svelte'
   import ConnectedView from '../../components/ConnectedView.svelte'
@@ -19,6 +19,14 @@
   let error = $state('')
   let showQR = $state(false)
   let theme = $state<'light' | 'dark'>('dark')
+  let locale = $state(getLocale())
+
+  function toggleLocale() {
+    const next = locale === 'en' ? 'zh' : 'en'
+    locale = next
+    setLocale(next)
+    chrome.storage.local.set({ locale: next })
+  }
 
   // Sync theme to document so CSS variables cascade correctly
   $effect(() => {
@@ -43,6 +51,13 @@
 
   onMount(() => {
     queryTabTheme()
+
+    chrome.storage.local.get('locale', ({ locale: saved }) => {
+      if (saved === 'en' || saved === 'zh') {
+        locale = saved
+        setLocale(saved)
+      }
+    })
 
     chrome.runtime.sendMessage({ type: 'popup_get_state' }, (response) => {
       if (response?.state) {
@@ -120,6 +135,9 @@
           </svg>
         </button>
       {/if}
+      <button class="lang-btn" onclick={toggleLocale} title="Switch language">
+        {locale === 'zh' ? 'EN' : '中'}
+      </button>
       <span
         class="status-chip"
         class:connected={state.status === 'connected'}
@@ -343,6 +361,20 @@
     line-height: 1;
   }
   .icon-btn:hover { color: var(--t2); background: var(--s1); }
+
+  .lang-btn {
+    background: none;
+    border: 1px solid var(--ln);
+    color: var(--t3);
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: 5px;
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.4;
+    transition: color 0.12s, border-color 0.12s, background 0.12s;
+  }
+  .lang-btn:hover { color: var(--t1); border-color: var(--ln2); background: var(--s1); }
 
   .status-chip {
     font-size: 11px;
