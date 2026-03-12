@@ -215,21 +215,24 @@ export default defineBackground(() => {
   async function handlePopupConnect(serverUrl: string) {
     const current = await getState()
 
+    const isResume = !!(current.sessionId && current.sessionUrl && current.serverUrl === serverUrl)
+
     await updateState({
       serverUrl,
-      status: 'connecting',
+      // Resume: use 'reconnecting' to preserve cached account info in popup.
+      // Fresh connect: use 'connecting' (bare spinner is appropriate).
+      status: isResume ? 'reconnecting' : 'connecting',
       error: undefined,
     })
 
     await ensureOffscreen()
 
-    // If we have an existing session for the same server, try to resume it
-    if (current.sessionId && current.sessionUrl && current.serverUrl === serverUrl) {
+    if (isResume) {
       sendToOffscreen({
         type: 'resume',
         serverUrl,
-        sessionId: current.sessionId,
-        sessionUrl: current.sessionUrl,
+        sessionId: current.sessionId!,
+        sessionUrl: current.sessionUrl!,
       })
     } else {
       sendToOffscreen({ type: 'connect', serverUrl })

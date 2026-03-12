@@ -32,6 +32,8 @@ export default defineUnlistedScript(() => {
   // ---- State readiness (wait for first state_update from extension) ----
   let stateReady = false
   let stateReadyCallbacks: (() => void)[] = []
+  // Callbacks invoked on every state_update (used by eth_requestAccounts to wait for connection)
+  const stateUpdateWaiters = new Set<() => void>()
 
   function waitForState(): Promise<void> {
     if (stateReady) return Promise.resolve()
@@ -181,24 +183,11 @@ export default defineUnlistedScript(() => {
               { parentCapability: 'eth_accounts', caveats: [{ type: 'restrictReturnedAccounts', value: currentAccounts }] },
             ])
           }
-          return waitForState().then(() => {
-            if (currentAccounts.length > 0) {
-              log(`   → LOCAL (requestPermissions, accounts available after waitForState)`)
-              return [{ parentCapability: 'eth_accounts', caveats: [{ type: 'restrictReturnedAccounts', value: currentAccounts }] }]
-            }
-            log(`   → FORWARD as eth_requestAccounts (no cached accounts)`)
-            return forwardRequest('eth_requestAccounts').then((accounts: any) => {
-              // Update local state immediately so subsequent eth_accounts returns correct data
-              if (Array.isArray(accounts) && accounts.length > 0) {
-                currentAccounts = accounts
-                isConnected = true
-                log(`   → Updated local state: accounts=${accounts[0]}`)
-              }
-              return [
-                { parentCapability: 'eth_accounts', caveats: [{ type: 'restrictReturnedAccounts', value: accounts }] },
-              ]
-            })
-          })
+          // No cached accounts — delegate to eth_requestAccounts which waits for wallet connection
+          log(`   → DELEGATE to eth_requestAccounts (no cached accounts)`)
+          return provider._handleRequest('eth_requestAccounts').then((accounts: any) => [
+            { parentCapability: 'eth_accounts', caveats: [{ type: 'restrictReturnedAccounts', value: accounts }] },
+          ])
         }
 
         case 'wallet_revokePermissions':
@@ -224,15 +213,44 @@ export default defineUnlistedScript(() => {
               log(`   → LOCAL (requestAccounts, already connected)`)
               return [...currentAccounts]
             }
-            log(`   → FORWARD (requestAccounts, not connected)`)
-            return forwardRequest(method, params).then((accounts: any) => {
-              // Update local state immediately so subsequent eth_accounts/eth_chainId work
-              if (Array.isArray(accounts) && accounts.length > 0) {
-                currentAccounts = accounts
-                isConnected = true
-                log(`   → Updated local state from requestAccounts: accounts=${accounts[0]}`)
+            // Wallet not connected yet — wait for connect event instead of forwarding
+            // to offscreen (which would fail immediately). This handles the case where
+            // the user clicks "connect" on the DApp while scanning QR / wallet is connecting.
+            log(`   → WAITING for wallet connection (requestAccounts)`)
+            return new Promise<unknown>((resolve, reject) => {
+              const timeout = setTimeout(() => {
+                cleanup()
+                log(`   → requestAccounts TIMEOUT (60s)`)
+                const err: any = new Error('User rejected the request')
+                err.code = 4001
+                reject(err)
+              }, 60_000)
+
+              function onStateUpdate() {
+                if (isConnected && currentAccounts.length > 0) {
+                  cleanup()
+                  log(`   → requestAccounts resolved from state_update: accounts=${currentAccounts[0]}`)
+                  resolve([...currentAccounts])
+                }
               }
-              return accounts
+
+              function cleanup() {
+                clearTimeout(timeout)
+                provider.removeListener('accountsChanged', onAccountsChanged)
+                stateUpdateWaiters.delete(onStateUpdate)
+              }
+
+              function onAccountsChanged(accounts: string[]) {
+                if (accounts.length > 0) {
+                  cleanup()
+                  log(`   → requestAccounts resolved from accountsChanged: accounts=${accounts[0]}`)
+                  resolve([...accounts])
+                }
+              }
+
+              provider.on('accountsChanged', onAccountsChanged)
+              // Also listen for state_update (fires before individual events)
+              stateUpdateWaiters.add(onStateUpdate)
             })
           })
         }
@@ -428,6 +446,12 @@ export default defineUnlistedScript(() => {
         if (isConnected && currentAccounts.length > 0) {
           if (!wasConnected) {
             emit('connect', { chainId: currentChainId })
+            // Re-announce via EIP-6963 so DApps discover the now-connected provider.
+            // DApps that listed the provider before (with no accounts) will see the update.
+            if (providerActivated) {
+              log('🔔 Re-announcing EIP-6963 (provider connected)')
+              announceProvider()
+            }
           }
           // Only emit accountsChanged when accounts actually change
           const accountsChanged = prevAccounts.length !== currentAccounts.length ||
@@ -451,6 +475,8 @@ export default defineUnlistedScript(() => {
         markStateReady()
         // Announce provider after first state_update so DApps see correct accounts
         activateProvider()
+        // Notify any eth_requestAccounts waiters
+        stateUpdateWaiters.forEach((fn) => fn())
         break
       }
     }

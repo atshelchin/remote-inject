@@ -197,13 +197,11 @@
   <!-- ── Reconnecting ── -->
   {:else if state.status === 'reconnecting'}
     {#if state.account}
-      <!-- SSE dropped but walletInfo is cached — show as connected, reconnects automatically -->
+      <!-- SSE dropped but walletInfo is cached — show as connected, allow manual reconnect -->
       <div class="main-view">
         <ConnectedView account={state.account} chainId={state.chainId ?? '0x1'} sessionId={state.sessionId} />
-        {#if state.error === 'max_retries'}
-          <p class="reconnect-hint">{t('status.connectionLost')}</p>
-          <button class="btn-primary" onclick={reconnect}>{t('btn.reconnect')}</button>
-        {/if}
+        <p class="reconnect-hint">{t('status.connectionLost')}</p>
+        <button class="btn-primary" onclick={reconnect}>{t('btn.reconnect')}</button>
         <RequestLog requests={state.requests} />
         <button class="btn-disconnect" onclick={disconnect}>{t('btn.disconnect')}</button>
       </div>

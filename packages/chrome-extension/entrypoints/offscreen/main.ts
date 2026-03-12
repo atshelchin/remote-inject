@@ -256,9 +256,11 @@ async function handleResume(serverUrl: string, sessionId: string, sessionUrl: st
   lastSessionUrl = sessionUrl
 
   try {
+    // Use 'reconnecting' (not 'connecting') to preserve cached account/session info in popup.
+    // 'connecting' shows a bare spinner; 'reconnecting' keeps the connected view visible.
     sendToBackground({
       type: 'state_update',
-      state: { status: 'connecting', sessionId, sessionUrl } as OffscreenProviderState,
+      state: { status: 'reconnecting', sessionId, sessionUrl } as OffscreenProviderState,
     })
 
     await provider.resumeSession({ serverUrl, sessionId, sessionUrl })
