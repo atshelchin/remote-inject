@@ -572,6 +572,13 @@
             <path d="M18 28l7 7 13-13" stroke="var(--color-success)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
         `
+      } else if (icon === 'disconnected') {
+        iconEl.innerHTML = `
+          <svg viewBox="0 0 56 56" fill="none">
+            <circle cx="28" cy="28" r="26" fill="var(--color-error-bg)"/>
+            <path d="M20 20l16 16M36 20l-16 16" stroke="var(--color-error)" stroke-width="3" stroke-linecap="round"/>
+          </svg>
+        `
       } else if (icon === 'pending') {
         iconEl.innerHTML = `
           <div class="pulse-ring"></div>
@@ -801,7 +808,7 @@
             if (resp.ok) {
               // Session 还在，SSE 因其他原因关闭（如密钥错误、并发连接） — 可重连
               console.log('[Bridge] Session still valid, showing reconnect button')
-              updateStatus('connected', t('bridge.connectionLost'), t('bridge.manualReconnectHint'))
+              updateStatus('disconnected', t('bridge.connectionLost'), t('bridge.manualReconnectHint'))
               document.getElementById('reconnectBtn').classList.remove('hidden')
               document.getElementById('disconnectBtn').classList.add('hidden')
             } else {
@@ -811,7 +818,7 @@
           }).catch(() => {
             // 网络不可达 — 服务器可能暂时挂了，允许用户手动重试
             console.log('[Bridge] Server unreachable, showing reconnect button')
-            updateStatus('connected', t('bridge.connectionLost'), t('bridge.manualReconnectHint'))
+            updateStatus('disconnected', t('bridge.connectionLost'), t('bridge.manualReconnectHint'))
             document.getElementById('reconnectBtn').classList.remove('hidden')
             document.getElementById('disconnectBtn').classList.add('hidden')
           })
@@ -827,7 +834,7 @@
             eventSource.close()
             eventSource = null
             console.log('[Bridge] Max retries reached, showing manual reconnect button')
-            updateStatus('connected', t('bridge.connectionLost'), t('bridge.manualReconnectHint'))
+            updateStatus('disconnected', t('bridge.connectionLost'), t('bridge.manualReconnectHint'))
             document.getElementById('reconnectBtn').classList.remove('hidden')
             document.getElementById('disconnectBtn').classList.add('hidden')
           } else if (!reconnectUiTimer) {

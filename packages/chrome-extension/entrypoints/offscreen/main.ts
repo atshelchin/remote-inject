@@ -1,5 +1,7 @@
 import { RemoteProvider } from '@shelchin/remote-inject-sdk'
 import type { BackgroundToOffscreenMessage, OffscreenProviderState } from '../../lib/types'
+// @ts-ignore — Vite ?inline returns a base64 data URI at build time
+import iconDataUrl from '../../assets/icon-48.png?inline'
 
 const provider = new RemoteProvider()
 
@@ -214,7 +216,8 @@ async function handleConnect(serverUrl: string) {
 
     const result = await provider.connect(serverUrl, {
       name: 'Remote Inject Bridge',
-      url: 'chrome-extension://' + chrome.runtime.id,
+      url: serverUrl,
+      icon: iconDataUrl as string,
     })
 
     // result.url may be absolute (from server) or relative
