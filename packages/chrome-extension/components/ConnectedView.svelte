@@ -1,5 +1,5 @@
 <script lang="ts">
-  let { account, chainId }: { account: string; chainId: string } = $props()
+  let { account, chainId, sessionId }: { account: string; chainId: string; sessionId?: string } = $props()
 
   const CHAIN_NAMES: Record<string, string> = {
     '0x1': 'Ethereum',
@@ -41,6 +41,12 @@
     <span class="label">Network</span>
     <span class="value">{chainName}</span>
   </div>
+  {#if sessionId}
+  <div class="row session-row">
+    <span class="label">Session <span class="verify-hint">verify with wallet</span></span>
+    <span class="session-id">{sessionId}</span>
+  </div>
+  {/if}
 </div>
 
 <style>
@@ -94,5 +100,27 @@
     font-size: 11px;
     color: #34d399;
     font-family: -apple-system, sans-serif;
+  }
+
+  .session-row {
+    border-top: 1px solid #1e293b;
+    padding-top: 8px;
+  }
+
+  .verify-hint {
+    font-size: 9px;
+    color: #475569;
+    font-weight: normal;
+    text-transform: none;
+    letter-spacing: 0;
+    margin-left: 4px;
+  }
+
+  .session-id {
+    font-size: 16px;
+    font-weight: 700;
+    font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+    color: #3b82f6;
+    letter-spacing: 3px;
   }
 </style>

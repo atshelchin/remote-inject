@@ -540,8 +540,10 @@
         <p style="margin-top: 16px; color: var(--color-text-secondary); font-size: 14px; text-align: center;">
           <% if (it.locale === 'zh') { %>使用手机钱包扫描二维码连接<% } else { %>Scan QR code with your mobile wallet<% } %>
         </p>
-        <div style="margin-top: 8px; font-size: 12px; color: var(--color-text-muted); font-family: 'SF Mono', Monaco, monospace;">
-          Session: <span id="qrSessionId" style="font-weight: 600; color: var(--color-text-secondary);">-</span>
+        <div style="margin-top: 10px; padding: 8px 14px; background: var(--color-bg-tertiary); border-radius: 8px; display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; box-sizing: border-box;">
+          <span style="font-size: 11px; color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 0.5px; flex-shrink: 0;">Session</span>
+          <span id="qrSessionId" style="font-size: 15px; font-weight: 700; font-family: 'SF Mono', Monaco, monospace; color: var(--color-accent); letter-spacing: 2px;">-</span>
+          <span style="font-size: 10px; color: var(--color-text-muted); text-align: right; flex-shrink: 0;"><% if (it.locale === 'zh') { %>请确认钱包端显示相同 ID<% } else { %>Verify wallet shows same ID<% } %></span>
         </div>
         <div class="session-url-container">
           <div class="session-url" id="sessionUrl"></div>
@@ -619,8 +621,8 @@
           <div class="info-value" id="walletChainId">-</div>
         </div>
         <div class="info-item">
-          <div class="info-label">Session</div>
-          <div class="info-value" id="walletSession">-</div>
+          <div class="info-label">Session <% if (it.locale === 'zh') { %><span style="font-size:10px;color:var(--color-text-muted);font-weight:normal;">与钱包端核对</span><% } else { %><span style="font-size:10px;color:var(--color-text-muted);font-weight:normal;">verify with wallet</span><% } %></div>
+          <div class="info-value" id="walletSession" style="font-family:'SF Mono',Monaco,monospace;font-size:16px;font-weight:700;color:var(--color-accent);letter-spacing:2px;">-</div>
         </div>
       </div>
     </div>

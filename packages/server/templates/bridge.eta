@@ -94,17 +94,39 @@
       color: var(--color-text-muted);
     }
 
-    /* Session ID badge */
-    .session-badge {
-      display: inline-block;
-      margin-top: 10px;
-      padding: 3px 10px;
+    /* Session indicator */
+    .session-indicator {
+      margin-top: 14px;
+      padding: 10px 14px;
       background: var(--color-bg-tertiary);
-      border-radius: 10px;
+      border-radius: var(--radius-md);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .session-indicator-label {
       font-size: 11px;
       color: var(--color-text-muted);
-      font-family: 'SF Mono', Monaco, monospace;
+      text-transform: uppercase;
       letter-spacing: 0.5px;
+      flex-shrink: 0;
+    }
+
+    .session-indicator-id {
+      font-size: 15px;
+      font-weight: 700;
+      font-family: 'SF Mono', Monaco, monospace;
+      color: var(--color-accent);
+      letter-spacing: 2px;
+    }
+
+    .session-indicator-hint {
+      font-size: 10px;
+      color: var(--color-text-muted);
+      text-align: right;
+      flex-shrink: 0;
     }
   </style>
 </head>
@@ -162,7 +184,11 @@
       </button>
 
       <div class="hint" id="hint"><%= it.t('bridge.keepOpen') %></div>
-      <div class="session-badge">Session: <%= it.sessionId %></div>
+      <div class="session-indicator">
+        <span class="session-indicator-label">Session</span>
+        <span class="session-indicator-id"><%= it.sessionId %></span>
+        <span class="session-indicator-hint"><%= it.locale === 'zh' ? '请确认 DApp 端显示相同 ID' : 'Verify DApp shows same ID' %></span>
+      </div>
     </div>
   </div>
 

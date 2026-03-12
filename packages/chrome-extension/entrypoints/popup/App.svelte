@@ -110,11 +110,18 @@
       {#if state.sessionUrl}
         <QRCode url={state.sessionUrl} />
       {/if}
+      {#if state.sessionId}
+        <div class="session-bar">
+          <span class="session-bar-label">Session</span>
+          <span class="session-bar-id">{state.sessionId}</span>
+          <span class="session-bar-hint">verify with wallet</span>
+        </div>
+      {/if}
       <button class="btn secondary" onclick={disconnect}>Cancel</button>
     </div>
   {:else if state.status === 'reconnecting'}
     {#if state.account}
-      <ConnectedView account={state.account} chainId={state.chainId ?? '0x1'} />
+      <ConnectedView account={state.account} chainId={state.chainId ?? '0x1'} sessionId={state.sessionId} />
     {/if}
     <div class="reconnecting-banner">
       <span class="banner-text">Connection lost</span>
@@ -139,7 +146,7 @@
     {/if}
     <button class="btn danger" onclick={disconnect}>Disconnect</button>
   {:else if state.status === 'connected'}
-    <ConnectedView account={state.account ?? ''} chainId={state.chainId ?? '0x1'} />
+    <ConnectedView account={state.account ?? ''} chainId={state.chainId ?? '0x1'} sessionId={state.sessionId} />
     {#if debugMode}
       {#if state.sessionUrl}
         <div class="session-hint">
@@ -422,5 +429,41 @@
 
   :global(.btn.danger:hover) {
     background: #991b1b;
+  }
+
+  .session-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 8px 12px;
+    background: #1e293b;
+    border-radius: 8px;
+    box-sizing: border-box;
+  }
+
+  .session-bar-label {
+    font-size: 10px;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    flex-shrink: 0;
+  }
+
+  .session-bar-id {
+    font-size: 16px;
+    font-weight: 700;
+    font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+    color: #3b82f6;
+    letter-spacing: 3px;
+    flex: 1;
+    text-align: center;
+  }
+
+  .session-bar-hint {
+    font-size: 9px;
+    color: #475569;
+    text-align: right;
+    flex-shrink: 0;
   }
 </style>
