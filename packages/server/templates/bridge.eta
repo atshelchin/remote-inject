@@ -629,7 +629,7 @@
     function manualReconnect() {
       consecutiveErrors = 0
       document.getElementById('reconnectBtn').classList.add('hidden')
-      updateStatus('loading', t('bridge.reconnecting', { attempt: '', maxAttempts: '' }), t('bridge.pleaseWait'))
+      updateStatus('loading', t('bridge.reconnecting'), t('bridge.pleaseWait'))
       connectSSE()
     }
 
@@ -815,7 +815,7 @@
             reconnectUiTimer = setTimeout(() => {
               reconnectUiTimer = null
               if (eventSource && eventSource.readyState !== EventSource.OPEN && !userInitiatedDisconnect) {
-                updateStatus('loading', t('bridge.reconnecting', { attempt: '', maxAttempts: '' }), t('bridge.networkDisconnected'))
+                updateStatus('loading', t('bridge.reconnecting'), t('bridge.networkDisconnected'))
               }
             }, 6000)
           }
