@@ -49,6 +49,8 @@ export interface Session {
   walletInfo?: WalletInfo   // 移动端钱包状态（缓存，用于重连时恢复）
   mobileLocked: boolean     // 移动端是否已锁定（防止被踢）
   terminated: boolean       // 是否已被用户主动终止（不可再连接）
+  dappQueue: object[]       // DApp 离线时暂存的消息（mobile → dapp），重连后投递
+  mobileQueue: object[]     // Mobile 离线时暂存的消息（dapp → mobile），重连后投递
 }
 
 // 排除易混淆字符 (0/O/1/I/L)
@@ -64,6 +66,9 @@ const IDLE_TIMEOUT = parseInt(process.env.SESSION_IDLE_TTL || '3600', 10) * 1000
 
 // 容量限制（可通过环境变量配置）
 const MAX_SESSIONS = parseInt(process.env.MAX_SESSIONS || '10000', 10)
+
+// 每个方向的消息队列上限（防止内存占用过大）
+const MAX_QUEUE_SIZE = 50
 
 // Session 存储
 const sessions = new Map<string, Session>()
@@ -140,6 +145,8 @@ export function createSession(metadata?: DAppMetadata): Session {
     metadata,
     mobileLocked: false,
     terminated: false,
+    dappQueue: [],
+    mobileQueue: [],
   }
   sessions.set(session.id, session)
   return session
@@ -292,6 +299,41 @@ export function updateWalletAddress(sessionId: string, address: string): void {
   const session = sessions.get(sessionId)
   if (!session || !session.walletInfo) return
   session.walletInfo.address = address
+}
+
+// 将消息暂存到目标角色的队列（对端离线时调用）
+// 返回 false 表示队列已满或 session 不存在
+export function enqueueMessage(sessionId: string, targetRole: 'dapp' | 'mobile', data: object): boolean {
+  const session = sessions.get(sessionId)
+  if (!session) return false
+
+  const queue = targetRole === 'dapp' ? session.dappQueue : session.mobileQueue
+  if (queue.length >= MAX_QUEUE_SIZE) {
+    // 队列已满，丢弃最旧的消息，腾出空间给新消息
+    queue.shift()
+    console.log(`[Session] Queue full for ${targetRole} in session ${sessionId}, dropped oldest message`)
+  }
+  queue.push(data)
+  return true
+}
+
+// 将指定角色的队列中的消息全部发送出去（角色重连时调用）
+export function flushQueue(sessionId: string, role: 'dapp' | 'mobile', controller: SSEController): void {
+  const session = sessions.get(sessionId)
+  if (!session) return
+
+  const queue = role === 'dapp' ? session.dappQueue : session.mobileQueue
+  if (queue.length === 0) return
+
+  console.log(`[Session] Flushing ${queue.length} queued messages to ${role} for session ${sessionId}`)
+  for (const data of queue) {
+    sendSSE(controller, data)
+  }
+  if (role === 'dapp') {
+    session.dappQueue = []
+  } else {
+    session.mobileQueue = []
+  }
 }
 
 // 清理过期 Session（两级清理）

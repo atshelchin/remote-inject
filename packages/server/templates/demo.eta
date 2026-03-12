@@ -540,6 +540,9 @@
         <p style="margin-top: 16px; color: var(--color-text-secondary); font-size: 14px; text-align: center;">
           <% if (it.locale === 'zh') { %>使用手机钱包扫描二维码连接<% } else { %>Scan QR code with your mobile wallet<% } %>
         </p>
+        <div style="margin-top: 8px; font-size: 12px; color: var(--color-text-muted); font-family: 'SF Mono', Monaco, monospace;">
+          Session: <span id="qrSessionId" style="font-weight: 600; color: var(--color-text-secondary);">-</span>
+        </div>
         <div class="session-url-container">
           <div class="session-url" id="sessionUrl"></div>
           <button class="btn-copy" id="copyBtn" onclick="copySessionUrl()"><%= it.t('common.copy') %></button>
@@ -1472,6 +1475,7 @@
         document.getElementById('configSection').classList.add('hidden')
         document.getElementById('qrContainer').classList.remove('hidden')
 
+        document.getElementById('qrSessionId').textContent = sessionId
         logResult(LOCALE === 'zh' ? `Session 已创建: ${sessionId}` : `Session created: ${sessionId}`, 'info')
         logResult(LOCALE === 'zh' ? '等待移动钱包扫码...' : 'Waiting for mobile wallet to scan...', 'info')
 
@@ -1607,6 +1611,7 @@
         if (walletTheme) urlObj.searchParams.set('theme', walletTheme)
         finalUrl = urlObj.toString()
 
+        document.getElementById('qrSessionId').textContent = sessionData.sessionId
         document.getElementById('sessionUrl').textContent = finalUrl
         const qrcodeContainer = document.getElementById('qrcode')
         qrcodeContainer.innerHTML = ''

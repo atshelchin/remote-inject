@@ -93,6 +93,19 @@
       font-size: 11px;
       color: var(--color-text-muted);
     }
+
+    /* Session ID badge */
+    .session-badge {
+      display: inline-block;
+      margin-top: 10px;
+      padding: 3px 10px;
+      background: var(--color-bg-tertiary);
+      border-radius: 10px;
+      font-size: 11px;
+      color: var(--color-text-muted);
+      font-family: 'SF Mono', Monaco, monospace;
+      letter-spacing: 0.5px;
+    }
   </style>
 </head>
 <body>
@@ -149,6 +162,7 @@
       </button>
 
       <div class="hint" id="hint"><%= it.t('bridge.keepOpen') %></div>
+      <div class="session-badge">Session: <%= it.sessionId %></div>
     </div>
   </div>
 
@@ -673,13 +687,14 @@
 
             case 'disconnect':
               if (message.reason === 'User initiated') {
-                // DApp 用户主动断开 — 永久性断开
+                // DApp 用户主动断开 — 永久性断开，通知用户
                 userInitiatedDisconnect = true
                 showError(t('bridge.disconnected'), t('bridge.peerDisconnected'))
               } else {
-                // DApp 的 SSE 断了 — 等待 DApp 重连（服务端有缓存，会自动推送 connect）
-                console.log('[Bridge] DApp connection dropped, waiting for reconnection...')
-                updateStatus('loading', t('bridge.peerReconnecting'), '')
+                // Session 过期或服务端终止 — 显示错误
+                // 注意：DApp 的 SSE 临时断线不再触发此分支，服务端已改为静默处理（消息入队）
+                userInitiatedDisconnect = true
+                showError(t('bridge.error'), t('bridge.sessionExpired'))
               }
               break
 

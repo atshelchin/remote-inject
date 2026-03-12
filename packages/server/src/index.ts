@@ -17,6 +17,8 @@ import {
   setWalletInfo,
   updateWalletChain,
   updateWalletAddress,
+  enqueueMessage,
+  flushQueue,
 } from './session'
 import { sessionRateLimiter, getClientIP } from './ratelimit'
 import { renderPage, getAllLocales } from './template'
@@ -366,11 +368,8 @@ const app = new Elysia()
       if (cleanedUp) return
       cleanedUp = true
       unregisterConnection(sessionId!, role as 'dapp' | 'mobile')
-      // 通知对端（getPeer 返回的是 myRole 的对端）
-      const peer = getPeer(sessionId!, role as 'dapp' | 'mobile')
-      if (peer) {
-        sendSSE(peer, { type: 'disconnect', reason: 'Peer disconnected' })
-      }
+      // 不通知对端 SSE 断开 — 对端只关心自身的 SSE 连接状态，断线消息会引发误判
+      // 需要传达给对端的消息（如用户主动断开）应通过 /message 端点发送，服务器会排队暂存
       console.log(`[SSE] ${role} disconnected from session ${sessionId}`)
     }
 
@@ -398,6 +397,9 @@ const app = new Elysia()
             console.log(`[SSE] Mobile reconnected, sent cached connect to dapp for session ${sessionId}`)
           }
         }
+
+        // 投递离线期间暂存的消息（walletInfo 推送之后，保证顺序正确）
+        flushQueue(sessionId!, role as 'dapp' | 'mobile', controller)
 
         console.log(`[SSE] ${role} connected to session ${sessionId}`)
 
@@ -470,8 +472,15 @@ const app = new Elysia()
 
     const peer = getPeer(sessionId, role as 'dapp' | 'mobile')
     if (!peer) {
+      // 对端离线 — 暂存消息，等对端重连后投递
+      const targetRole = role === 'dapp' ? 'mobile' : 'dapp'
+      const queued = enqueueMessage(sessionId, targetRole as 'dapp' | 'mobile', body)
+      if (queued) {
+        console.log(`[HTTP] ${role} → ${targetRole}: queued (peer offline)`)
+        return new Response('OK', { status: 200 })
+      }
       return new Response(
-        JSON.stringify({ type: 'error', code: -32000, message: 'Peer not connected' }),
+        JSON.stringify({ type: 'error', code: -32000, message: 'Queue full or session not found' }),
         { status: 503, headers: { 'Content-Type': 'application/json' } }
       )
     }
