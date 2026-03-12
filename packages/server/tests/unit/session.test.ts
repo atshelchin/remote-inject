@@ -16,12 +16,12 @@ import {
   type DAppMetadata,
 } from '../../src/session'
 
-// Mock WebSocket
-function createMockWebSocket() {
+// Mock SSE controller (替代原来的 MockWebSocket)
+function createMockSSEController() {
   return {
-    send: mock(() => {}),
+    enqueue: mock(() => {}),
     close: mock(() => {}),
-    data: { sessionId: '', role: 'dapp' as const },
+    error: mock(() => {}),
   } as any
 }
 
@@ -71,16 +71,20 @@ describe('Session Management', () => {
       deleteSession(session.id)
     })
 
-    it('should set correct expiration time (5 minutes)', () => {
+    it('should set credential expiration to ~1 year and state expiration to ~5 minutes', () => {
       const before = Date.now()
       const session = createSession()
       const after = Date.now()
 
-      const expectedMin = before + 5 * 60 * 1000
-      const expectedMax = after + 5 * 60 * 1000
+      // expiresAt = credential TTL (1 year)
+      const oneYear = 365 * 24 * 60 * 60 * 1000
+      expect(session.expiresAt).toBeGreaterThanOrEqual(before + oneYear)
+      expect(session.expiresAt).toBeLessThanOrEqual(after + oneYear)
 
-      expect(session.expiresAt).toBeGreaterThanOrEqual(expectedMin)
-      expect(session.expiresAt).toBeLessThanOrEqual(expectedMax)
+      // stateExpiresAt = pending TTL (5 minutes)
+      const fiveMin = 5 * 60 * 1000
+      expect(session.stateExpiresAt).toBeGreaterThanOrEqual(before + fiveMin)
+      expect(session.stateExpiresAt).toBeLessThanOrEqual(after + fiveMin)
 
       deleteSession(session.id)
     })
@@ -208,9 +212,9 @@ describe('Session Management', () => {
 
     it('should return true after mobile connects', () => {
       const session = createSession()
-      const mockWs = createMockWebSocket()
+      const mockController = createMockSSEController()
 
-      registerConnection(session.id, 'mobile', mockWs)
+      registerConnection(session.id, 'mobile', mockController)
       expect(isMobileLocked(session.id)).toBe(true)
 
       deleteSession(session.id)
@@ -220,32 +224,32 @@ describe('Session Management', () => {
   describe('registerConnection', () => {
     it('should register dapp connection', () => {
       const session = createSession()
-      const mockWs = createMockWebSocket()
+      const mockController = createMockSSEController()
 
-      const result = registerConnection(session.id, 'dapp', mockWs)
+      const result = registerConnection(session.id, 'dapp', mockController)
 
       expect(result).toBeDefined()
-      expect(result?.dapp).toBe(mockWs)
+      expect(result?.dapp).toBe(mockController)
 
       deleteSession(session.id)
     })
 
     it('should register mobile connection', () => {
       const session = createSession()
-      const mockWs = createMockWebSocket()
+      const mockController = createMockSSEController()
 
-      const result = registerConnection(session.id, 'mobile', mockWs)
+      const result = registerConnection(session.id, 'mobile', mockController)
 
       expect(result).toBeDefined()
-      expect(result?.mobile).toBe(mockWs)
+      expect(result?.mobile).toBe(mockController)
       expect(result?.mobileLocked).toBe(true)
 
       deleteSession(session.id)
     })
 
     it('should return null for non-existent session', () => {
-      const mockWs = createMockWebSocket()
-      const result = registerConnection('ZZZZ', 'dapp', mockWs)
+      const mockController = createMockSSEController()
+      const result = registerConnection('ZZZZ', 'dapp', mockController)
       expect(result).toBeNull()
     })
 
@@ -253,21 +257,21 @@ describe('Session Management', () => {
       const session = createSession()
       terminateSession(session.id)
 
-      const mockWs = createMockWebSocket()
-      const result = registerConnection(session.id, 'dapp', mockWs)
+      const mockController = createMockSSEController()
+      const result = registerConnection(session.id, 'dapp', mockController)
       expect(result).toBeNull()
     })
 
     it('should reject second mobile connection when locked', () => {
       const session = createSession()
-      const mockWs1 = createMockWebSocket()
-      const mockWs2 = createMockWebSocket()
+      const mockController1 = createMockSSEController()
+      const mockController2 = createMockSSEController()
 
       // First mobile connects
-      registerConnection(session.id, 'mobile', mockWs1)
+      registerConnection(session.id, 'mobile', mockController1)
 
       // Second mobile should be rejected
-      const result = registerConnection(session.id, 'mobile', mockWs2)
+      const result = registerConnection(session.id, 'mobile', mockController2)
       expect(result).toBeNull()
 
       deleteSession(session.id)
@@ -275,8 +279,8 @@ describe('Session Management', () => {
 
     it('should update status to connected when both connect', () => {
       const session = createSession()
-      const dappWs = createMockWebSocket()
-      const mobileWs = createMockWebSocket()
+      const dappWs = createMockSSEController()
+      const mobileWs = createMockSSEController()
 
       registerConnection(session.id, 'dapp', dappWs)
       expect(getSession(session.id)?.status).toBe('pending')
@@ -287,29 +291,30 @@ describe('Session Management', () => {
       deleteSession(session.id)
     })
 
-    it('should extend expiration to 24 hours when connected', () => {
+    it('should extend stateExpiresAt to 7 days when both sides connected', () => {
       const session = createSession()
-      const dappWs = createMockWebSocket()
-      const mobileWs = createMockWebSocket()
+      const dappWs = createMockSSEController()
+      const mobileWs = createMockSSEController()
 
-      const originalExpiry = session.expiresAt
+      const originalStateExpiry = session.stateExpiresAt
 
       registerConnection(session.id, 'dapp', dappWs)
       registerConnection(session.id, 'mobile', mobileWs)
 
-      const newExpiry = getSession(session.id)?.expiresAt ?? 0
-
-      // New expiry should be much longer (24 hours vs 5 minutes)
-      expect(newExpiry).toBeGreaterThan(originalExpiry)
-      expect(newExpiry - Date.now()).toBeGreaterThan(23 * 60 * 60 * 1000) // At least 23 hours
+      const updatedSession = getSession(session.id)!
+      // stateExpiresAt should extend to 7 days (much longer than initial 5 min)
+      expect(updatedSession.stateExpiresAt).toBeGreaterThan(originalStateExpiry)
+      expect(updatedSession.stateExpiresAt - Date.now()).toBeGreaterThan(6 * 24 * 60 * 60 * 1000) // At least 6 days
+      // credential expiresAt should remain unchanged (still 1 year)
+      expect(updatedSession.expiresAt).toBe(session.expiresAt)
 
       deleteSession(session.id)
     })
 
     it('should allow dapp reconnection', () => {
       const session = createSession()
-      const dappWs1 = createMockWebSocket()
-      const dappWs2 = createMockWebSocket()
+      const dappWs1 = createMockSSEController()
+      const dappWs2 = createMockSSEController()
 
       registerConnection(session.id, 'dapp', dappWs1)
       const result = registerConnection(session.id, 'dapp', dappWs2)
@@ -324,10 +329,10 @@ describe('Session Management', () => {
   describe('unregisterConnection', () => {
     it('should clear dapp connection', () => {
       const session = createSession()
-      const mockWs = createMockWebSocket()
+      const mockController = createMockSSEController()
 
-      registerConnection(session.id, 'dapp', mockWs)
-      expect(getSession(session.id)?.dapp).toBe(mockWs)
+      registerConnection(session.id, 'dapp', mockController)
+      expect(getSession(session.id)?.dapp).toBe(mockController)
 
       unregisterConnection(session.id, 'dapp')
       expect(getSession(session.id)?.dapp).toBeNull()
@@ -337,10 +342,10 @@ describe('Session Management', () => {
 
     it('should clear mobile connection and unlock', () => {
       const session = createSession()
-      const mockWs = createMockWebSocket()
+      const mockController = createMockSSEController()
 
-      registerConnection(session.id, 'mobile', mockWs)
-      expect(getSession(session.id)?.mobile).toBe(mockWs)
+      registerConnection(session.id, 'mobile', mockController)
+      expect(getSession(session.id)?.mobile).toBe(mockController)
       expect(getSession(session.id)?.mobileLocked).toBe(true)
 
       unregisterConnection(session.id, 'mobile')
@@ -352,8 +357,8 @@ describe('Session Management', () => {
 
     it('should update status to disconnected', () => {
       const session = createSession()
-      const dappWs = createMockWebSocket()
-      const mobileWs = createMockWebSocket()
+      const dappWs = createMockSSEController()
+      const mobileWs = createMockSSEController()
 
       registerConnection(session.id, 'dapp', dappWs)
       registerConnection(session.id, 'mobile', mobileWs)
@@ -371,8 +376,8 @@ describe('Session Management', () => {
 
     it('should allow mobile reconnection after unregister', () => {
       const session = createSession()
-      const mobileWs1 = createMockWebSocket()
-      const mobileWs2 = createMockWebSocket()
+      const mobileWs1 = createMockSSEController()
+      const mobileWs2 = createMockSSEController()
 
       registerConnection(session.id, 'mobile', mobileWs1)
       unregisterConnection(session.id, 'mobile')
@@ -403,22 +408,22 @@ describe('Session Management', () => {
 
     it('should close dapp connection', () => {
       const session = createSession()
-      const mockWs = createMockWebSocket()
+      const mockController = createMockSSEController()
 
-      registerConnection(session.id, 'dapp', mockWs)
+      registerConnection(session.id, 'dapp', mockController)
       terminateSession(session.id)
 
-      expect(mockWs.close).toHaveBeenCalled()
+      expect(mockController.close).toHaveBeenCalled()
     })
 
     it('should close mobile connection', () => {
       const session = createSession()
-      const mockWs = createMockWebSocket()
+      const mockController = createMockSSEController()
 
-      registerConnection(session.id, 'mobile', mockWs)
+      registerConnection(session.id, 'mobile', mockController)
       terminateSession(session.id)
 
-      expect(mockWs.close).toHaveBeenCalled()
+      expect(mockController.close).toHaveBeenCalled()
     })
 
     it('should not throw for non-existent session', () => {
@@ -429,8 +434,8 @@ describe('Session Management', () => {
       const session = createSession()
       terminateSession(session.id)
 
-      const mockWs = createMockWebSocket()
-      const result = registerConnection(session.id, 'dapp', mockWs)
+      const mockController = createMockSSEController()
+      const result = registerConnection(session.id, 'dapp', mockController)
 
       expect(result).toBeNull()
     })
@@ -439,8 +444,8 @@ describe('Session Management', () => {
   describe('getPeer', () => {
     it('should return mobile when called from dapp', () => {
       const session = createSession()
-      const dappWs = createMockWebSocket()
-      const mobileWs = createMockWebSocket()
+      const dappWs = createMockSSEController()
+      const mobileWs = createMockSSEController()
 
       registerConnection(session.id, 'dapp', dappWs)
       registerConnection(session.id, 'mobile', mobileWs)
@@ -453,8 +458,8 @@ describe('Session Management', () => {
 
     it('should return dapp when called from mobile', () => {
       const session = createSession()
-      const dappWs = createMockWebSocket()
-      const mobileWs = createMockWebSocket()
+      const dappWs = createMockSSEController()
+      const mobileWs = createMockSSEController()
 
       registerConnection(session.id, 'dapp', dappWs)
       registerConnection(session.id, 'mobile', mobileWs)
@@ -472,7 +477,7 @@ describe('Session Management', () => {
 
     it('should return null when peer not connected', () => {
       const session = createSession()
-      const dappWs = createMockWebSocket()
+      const dappWs = createMockSSEController()
 
       registerConnection(session.id, 'dapp', dappWs)
 
@@ -512,9 +517,9 @@ describe('Session Management', () => {
 
     it('should close connections on cleanup', async () => {
       const session = createSession()
-      const mockWs = createMockWebSocket()
+      const mockController = createMockSSEController()
 
-      registerConnection(session.id, 'dapp', mockWs)
+      registerConnection(session.id, 'dapp', mockController)
 
       // Manually set expiry to past
       const storedSession = getSession(session.id)
@@ -524,7 +529,7 @@ describe('Session Management', () => {
 
       cleanupExpiredSessions()
 
-      expect(mockWs.close).toHaveBeenCalled()
+      expect(mockController.close).toHaveBeenCalled()
     })
   })
 
@@ -554,8 +559,8 @@ describe('Session Management', () => {
 
     it('should count connected sessions correctly', () => {
       const session = createSession()
-      const dappWs = createMockWebSocket()
-      const mobileWs = createMockWebSocket()
+      const dappWs = createMockSSEController()
+      const mobileWs = createMockSSEController()
 
       registerConnection(session.id, 'dapp', dappWs)
       registerConnection(session.id, 'mobile', mobileWs)

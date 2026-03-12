@@ -10,10 +10,13 @@ import {
   registerConnection,
   unregisterConnection,
   getPeer,
+  sendSSE,
   verifySecret,
   isMobileLocked,
   startCleanupInterval,
-  type WebSocketData,
+  setWalletInfo,
+  updateWalletChain,
+  updateWalletAddress,
 } from './session'
 import { sessionRateLimiter, getClientIP } from './ratelimit'
 import { renderPage, getAllLocales } from './template'
@@ -327,114 +330,156 @@ const app = new Elysia()
     })
   })
 
-  // WebSocket 连接
-  .ws('/ws', {
-    // 验证查询参数
-    beforeHandle({ query }) {
-      const { session, role, k } = query as { session?: string; role?: string; k?: string }
+  // SSE 端点 — 服务端到客户端的事件流
+  .get('/sse', ({ query, request }: { query: { session?: string; role?: string; k?: string }; request: Request }) => {
+    const { session: sessionId, role, k } = query
 
-      if (!session || !role) {
-        return new Response('Missing session or role parameter', { status: 400 })
+    if (!sessionId || !role) {
+      return new Response('Missing session or role parameter', { status: 400 })
+    }
+    if (role !== 'dapp' && role !== 'mobile') {
+      return new Response('Invalid role, must be "dapp" or "mobile"', { status: 400 })
+    }
+
+    const sessionData = getSession(sessionId)
+    if (!sessionData) {
+      return new Response('Session not found', { status: 404 })
+    }
+    if (sessionData.terminated) {
+      return new Response('Session terminated', { status: 410 })
+    }
+
+    if (role === 'mobile') {
+      if (!k || !verifySecret(sessionId, k)) {
+        return new Response('Invalid or missing secret', { status: 403 })
       }
-
-      if (role !== 'dapp' && role !== 'mobile') {
-        return new Response('Invalid role, must be "dapp" or "mobile"', { status: 400 })
+      if (isMobileLocked(sessionId)) {
+        return new Response('Session already has a mobile connection', { status: 409 })
       }
+    }
 
-      const sessionData = getSession(session)
-      if (!sessionData) {
-        return new Response('Session not found', { status: 404 })
+    // 提前捕获对端（用于检测 DApp 重连）
+    const existingPeer = getPeer(sessionId, role as 'dapp' | 'mobile')
+
+    let cleanedUp = false
+    function cleanup() {
+      if (cleanedUp) return
+      cleanedUp = true
+      unregisterConnection(sessionId!, role as 'dapp' | 'mobile')
+      // 通知对端（getPeer 返回的是 myRole 的对端）
+      const peer = getPeer(sessionId!, role as 'dapp' | 'mobile')
+      if (peer) {
+        sendSSE(peer, { type: 'disconnect', reason: 'Peer disconnected' })
       }
+      console.log(`[SSE] ${role} disconnected from session ${sessionId}`)
+    }
 
-      // 移动端需要验证密钥
-      if (role === 'mobile') {
-        if (!k || !verifySecret(session, k)) {
-          return new Response('Invalid or missing secret', { status: 403 })
-        }
-        // 检查是否已被锁定
-        if (isMobileLocked(session)) {
-          return new Response('Session already has a mobile connection', { status: 409 })
-        }
-      }
-    },
-
-    // 连接打开
-    open(ws) {
-      const url = new URL(ws.data.request.url)
-      const sessionId = url.searchParams.get('session')!
-      const role = url.searchParams.get('role') as 'dapp' | 'mobile'
-
-      // 存储连接信息
-      ;(ws.data as any).sessionId = sessionId
-      ;(ws.data as any).role = role
-
-      // 检查对端是否已连接（用于DApp重连时通知mobile）
-      const existingPeer = getPeer(sessionId, role)
-
-      // 注册连接
-      const session = registerConnection(sessionId, role, ws.raw as any)
-      if (!session) {
-        ws.close(1008, 'Session not found or already locked')
-        return
-      }
-
-      // 发送 ready 消息
-      ws.send(JSON.stringify({ type: 'ready' }))
-
-      // 如果DApp重连且mobile已存在，通知mobile重发状态
-      if (role === 'dapp' && existingPeer) {
-        existingPeer.send(JSON.stringify({ type: 'dapp_reconnected' }))
-        console.log(`[WS] Notifying mobile that dapp reconnected to session ${sessionId}`)
-      }
-
-      console.log(`[WS] ${role} connected to session ${sessionId}`)
-    },
-
-    // 收到消息（透传到对端）
-    message(ws, message) {
-      const data = ws.data as any
-      const { sessionId, role } = data
-      const msgStr = typeof message === 'string' ? message : JSON.stringify(message)
-
-      // 获取对端连接
-      const peer = getPeer(sessionId, role)
-
-      if (!peer) {
-        // 对端未连接，发送错误
-        ws.send(JSON.stringify({
-          type: 'error',
-          code: -32000,
-          message: 'Peer not connected',
-        }))
-        return
-      }
-
-      // 透传消息到对端
-      peer.send(msgStr)
-
-      console.log(`[WS] ${role} -> ${role === 'dapp' ? 'mobile' : 'dapp'}: ${msgStr.substring(0, 100)}...`)
-    },
-
-    // 连接关闭
-    close(ws) {
-      const data = ws.data as any
-      const { sessionId, role } = data
-
-      if (sessionId && role) {
-        unregisterConnection(sessionId, role)
-
-        // 通知对端
-        const peer = getPeer(sessionId, role === 'dapp' ? 'mobile' : 'dapp')
-        if (peer) {
-          peer.send(JSON.stringify({
-            type: 'disconnect',
-            reason: 'Peer disconnected',
-          }))
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        const registered = registerConnection(sessionId!, role as 'dapp' | 'mobile', controller)
+        if (!registered) {
+          controller.close()
+          return
         }
 
-        console.log(`[WS] ${role} disconnected from session ${sessionId}`)
+        // 发送 ready 事件
+        sendSSE(controller, { type: 'ready' })
+
+        // 如果 walletInfo 已缓存（移动端曾连接过），直接推送 connect 给对应方
+        const walletInfo = sessionData.walletInfo
+        if (walletInfo) {
+          if (role === 'dapp') {
+            // DApp 连接（首次或重连）：服务端直接推送 connect，无需 mobile 重发
+            sendSSE(controller, { type: 'connect', address: walletInfo.address, chainId: walletInfo.chainId })
+            console.log(`[SSE] Sent cached wallet connect to dapp for session ${sessionId}`)
+          } else if (role === 'mobile' && existingPeer) {
+            // Mobile 重连且 DApp 仍在线：通知 DApp
+            sendSSE(existingPeer, { type: 'connect', address: walletInfo.address, chainId: walletInfo.chainId })
+            console.log(`[SSE] Mobile reconnected, sent cached connect to dapp for session ${sessionId}`)
+          }
+        }
+
+        console.log(`[SSE] ${role} connected to session ${sessionId}`)
+
+        // 客户端断开时清理（AbortSignal）
+        request.signal.addEventListener('abort', () => {
+          cleanup()
+          try { controller.close() } catch {}
+        })
+      },
+      cancel() {
+        cleanup()
+      },
+    })
+
+    return new Response(stream, {
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+        'X-Accel-Buffering': 'no',
+        'Access-Control-Allow-Origin': '*',
+      },
+    })
+  })
+
+  // 消息端点 — 客户端到服务端（转发给对端的 SSE 流）
+  .post('/message', async ({ query, request }: { query: { session?: string; role?: string; k?: string }; request: Request }) => {
+    const { session: sessionId, role, k } = query
+
+    if (!sessionId || !role) {
+      return new Response('Missing session or role parameter', { status: 400 })
+    }
+    if (role !== 'dapp' && role !== 'mobile') {
+      return new Response('Invalid role', { status: 400 })
+    }
+
+    const sessionData = getSession(sessionId)
+    if (!sessionData) {
+      return new Response('Session not found', { status: 404 })
+    }
+
+    if (role === 'mobile') {
+      if (!k || !verifySecret(sessionId, k)) {
+        return new Response('Invalid or missing secret', { status: 403 })
       }
-    },
+    }
+
+    let body: object
+    try {
+      body = await request.json()
+    } catch {
+      return new Response('Invalid JSON body', { status: 400 })
+    }
+
+    // 移动端消息：更新缓存的 walletInfo，用于 DApp 重连时恢复
+    if (role === 'mobile') {
+      const msg = body as Record<string, unknown>
+      if (msg.type === 'connect' && typeof msg.address === 'string' && typeof msg.chainId === 'number') {
+        setWalletInfo(sessionId, msg.address, msg.chainId)
+        // connect 消息：即使 DApp 尚未连接也返回 200（walletInfo 已缓存，DApp 连接时会自动推送）
+        const peer = getPeer(sessionId, 'mobile')
+        if (peer) sendSSE(peer, body)
+        return new Response('OK', { status: 200 })
+      } else if (msg.type === 'chainChanged' && typeof msg.chainId === 'number') {
+        updateWalletChain(sessionId, msg.chainId)
+      } else if (msg.type === 'accountsChanged' && Array.isArray(msg.accounts) && msg.accounts.length > 0) {
+        updateWalletAddress(sessionId, msg.accounts[0] as string)
+      }
+    }
+
+    const peer = getPeer(sessionId, role as 'dapp' | 'mobile')
+    if (!peer) {
+      return new Response(
+        JSON.stringify({ type: 'error', code: -32000, message: 'Peer not connected' }),
+        { status: 503, headers: { 'Content-Type': 'application/json' } }
+      )
+    }
+
+    sendSSE(peer, body)
+
+    console.log(`[HTTP] ${role} -> ${role === 'dapp' ? 'mobile' : 'dapp'}: ${JSON.stringify(body).substring(0, 100)}`)
+    return new Response('OK', { status: 200 })
   })
 
 // Custom theme CSS (loaded from CONFIG_DIR/themes/custom.css)

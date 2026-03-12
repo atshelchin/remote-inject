@@ -580,7 +580,7 @@
       <span class="flow-arrow">→</span>
       <div class="flow-box highlight">
         <h4>Relay Server</h4>
-        <p>WebSocket</p>
+        <p>SSE + HTTP</p>
       </div>
       <span class="flow-arrow">→</span>
       <div class="flow-box">

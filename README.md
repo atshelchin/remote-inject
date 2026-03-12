@@ -11,13 +11,13 @@ Remote Inject enables DApps to sign transactions using mobile wallets without re
 The principle is simple: open a bridge page in the mobile wallet's WebView, which "remotely injects" the wallet's `window.ethereum` capability to DApps on other devices.
 
 ```
-┌─────────────────┐         ┌─────────────────┐         ┌─────────────────┐
-│ Desktop Browser │         │  Remote Inject  │         │  Mobile Wallet  │
-│   (Your DApp)   │◄──WS───►│     Server      │◄───WS──►│   (WebView)     │
-│                 │         │                 │         │                 │
-│  SDK provides   │         │  Bun + Elysia   │         │     Real        │
-│ virtual ethereum│         │  Message relay  │         │ window.ethereum │
-└─────────────────┘         └─────────────────┘         └─────────────────┘
+┌─────────────────┐       SSE+HTTP      ┌─────────────────┐       SSE+HTTP      ┌─────────────────┐
+│ Desktop Browser │                     │  Remote Inject  │                     │  Mobile Wallet  │
+│   (Your DApp)   │◄───────────────────►│     Server      │◄───────────────────►│   (WebView)     │
+│                 │                     │                 │                     │                 │
+│  SDK provides   │                     │  Bun + Elysia   │                     │     Real        │
+│ virtual ethereum│                     │  Message relay  │                     │ window.ethereum │
+└─────────────────┘                     └─────────────────┘                     └─────────────────┘
 ```
 
 ## Why do you need it?
@@ -92,21 +92,22 @@ Server runs on `http://localhost:3700` by default.
 ```
   DApp                      Relay                     Mobile
    │                          │                          │
-   │───── WS connect ────────►│                          │
-   │◄──── ready ──────────────│                          │
-   │                          │◄────── WS connect ───────│
-   │                          │─────── ready ───────────►│
+   │── GET /sse?role=dapp ───►│                          │
+   │◄── ready ────────────────│                          │
+   │                          │◄── GET /sse?role=mobile ─│
+   │                          │─── ready ───────────────►│
    │                          │                          │
-   │                          │◄─ connect(addr,chain) ───│
-   │◄──── connect ────────────│                          │
+   │                          │◄─ POST connect(addr,chain)│
+   │                          │  (server caches walletInfo)
+   │◄── SSE connect ──────────│                          │
    │                          │                          │
-   │── eth_sendTransaction ──►│                          │
-   │                          │── eth_sendTransaction ──►│
+   │── POST eth_sendTransaction►│                         │
+   │                          │── SSE eth_sendTransaction►│
    │                          │                          │
    │                          │       [User confirms]    │
    │                          │                          │
-   │                          │◄─────── result ──────────│
-   │◄─────── result ──────────│                          │
+   │                          │◄──── POST result ────────│
+   │◄──── SSE result ─────────│                          │
 ```
 
 ## Tech Stack
@@ -114,7 +115,7 @@ Server runs on `http://localhost:3700` by default.
 | Component | Technology | Description |
 |-----------|------------|-------------|
 | Runtime | Bun | Fast, native TypeScript support |
-| Web Framework | Elysia | Lightweight, type-safe, native WebSocket |
+| Web Framework | Elysia | Lightweight, type-safe, native SSE |
 | Build Tool | Turborepo | Monorepo build orchestration |
 | Landing Page | Pure HTML | No framework, post-scan guide page |
 | Bridge Page | Pure HTML | No framework, runs in wallet WebView |
@@ -148,7 +149,7 @@ remote-inject/
 ├── packages/
 │   ├── server/                 # Relay service
 │   │   ├── src/
-│   │   │   ├── index.ts        # Entry, Elysia app + WebSocket
+│   │   │   ├── index.ts        # Entry, Elysia app + SSE/HTTP
 │   │   │   ├── session.ts      # Session management
 │   │   │   ├── template.ts     # Template rendering + i18n
 │   │   │   └── config.ts       # External config loader
@@ -170,7 +171,7 @@ remote-inject/
 │       │   ├── background.ts   # Service Worker
 │       │   ├── content.ts      # Content Script bridge
 │       │   ├── injected.ts     # EIP-1193/6963 provider
-│       │   ├── offscreen/      # WebSocket host (SDK)
+│       │   ├── offscreen/      # SSE + HTTP host (SDK)
 │       │   └── popup/          # Extension popup UI (Svelte)
 │       ├── wxt.config.ts
 │       └── package.json
@@ -185,10 +186,11 @@ remote-inject/
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/session` | POST | Create new Session, returns `{ id, url, expiresAt }` |
+| `/session` | POST | Create new Session, returns `{ id, secret, url, expiresAt }` |
 | `/session/:id` | GET | Get session info and status |
 | `/s/:id` | GET | Short link, redirects to landing page |
-| `/ws` | WS | WebSocket connection, params `session` and `role` |
+| `/sse` | GET | SSE connection (server→client push), params `session`, `role`, `k` |
+| `/message` | POST | Send message (client→server), params `session`, `role`, `k` |
 | `/health` | GET | Health check endpoint |
 | `/metrics` | GET | Server metrics and statistics |
 | `/demo` | GET | Demo page |
@@ -319,6 +321,12 @@ HOST=0.0.0.0
 
 # Capacity Limits
 MAX_SESSIONS=10000
+
+# Session TTL (seconds, optional — defaults shown)
+SESSION_CREDENTIAL_TTL=31536000   # 1 year  — session ID stays valid, no re-scan
+SESSION_PENDING_TTL=300           # 5 min   — waiting for first connection
+SESSION_CONNECTED_TTL=604800      # 7 days  — both sides connected
+SESSION_IDLE_TTL=3600             # 1 hour  — both disconnected, clears walletInfo
 
 # External Config Directory (optional)
 CONFIG_DIR=/opt/remote-inject/config

@@ -21,7 +21,7 @@ export default defineBackground(() => {
     await chrome.offscreen.createDocument({
       url: chrome.runtime.getURL('/offscreen.html'),
       reasons: [chrome.offscreen.Reason.WORKERS],
-      justification: 'Maintaining persistent WebSocket connection to relay server',
+      justification: 'Maintaining persistent SSE connection to relay server',
     })
   }
 

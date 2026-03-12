@@ -11,13 +11,13 @@ Remote Inject 让 DApp 通过移动钱包签名交易，无需依赖任何中心
 原理很简单：在移动钱包的 WebView 中打开一个桥接页面，将钱包的 `window.ethereum` 能力"远程注入"到其他设备的 DApp 中。
 
 ```
-┌─────────────────┐         ┌─────────────────┐         ┌─────────────────┐
-│   电脑浏览器     │         │  Remote Inject  │         │   移动钱包       │
-│   (你的 DApp)   │◄──WS───►│     Server      │◄───WS──►│   (WebView)     │
-│                 │         │                 │         │                 │
-│  SDK 提供虚拟   │         │  Bun + Elysia   │         │  真实的         │
-│  ethereum 对象  │         │  消息中继        │         │  window.ethereum│
-└─────────────────┘         └─────────────────┘         └─────────────────┘
+┌─────────────────┐     SSE+HTTP      ┌─────────────────┐     SSE+HTTP      ┌─────────────────┐
+│   电脑浏览器     │                   │  Remote Inject  │                   │   移动钱包       │
+│   (你的 DApp)   │◄─────────────────►│     Server      │◄─────────────────►│   (WebView)     │
+│                 │                   │                 │                   │                 │
+│  SDK 提供虚拟   │                   │  Bun + Elysia   │                   │  真实的         │
+│  ethereum 对象  │                   │  消息中继        │                   │  window.ethereum│
+└─────────────────┘                   └─────────────────┘                   └─────────────────┘
 ```
 
 ## 为什么需要它？
@@ -92,21 +92,22 @@ bun run dev
 ```
   DApp                      Relay                     Mobile
    │                          │                          │
-   │───── WS 连接 ───────────►│                          │
-   │◄──── ready ──────────────│                          │
-   │                          │◄────── WS 连接 ──────────│
-   │                          │─────── ready ───────────►│
+   │── GET /sse?role=dapp ───►│                          │
+   │◄── ready ────────────────│                          │
+   │                          │◄── GET /sse?role=mobile ─│
+   │                          │─── ready ───────────────►│
    │                          │                          │
-   │                          │◄─ connect(addr,chain) ───│
-   │◄──── connect ────────────│                          │
+   │                          │◄─ POST connect(addr,chain)│
+   │                          │  (服务端缓存 walletInfo)  │
+   │◄── SSE connect ──────────│                          │
    │                          │                          │
-   │── eth_sendTransaction ──►│                          │
-   │                          │── eth_sendTransaction ──►│
+   │── POST eth_sendTransaction►│                         │
+   │                          │── SSE eth_sendTransaction►│
    │                          │                          │
    │                          │       [用户确认]          │
    │                          │                          │
-   │                          │◄─────── result ──────────│
-   │◄─────── result ──────────│                          │
+   │                          │◄──── POST result ────────│
+   │◄──── SSE result ─────────│                          │
 ```
 
 ## 技术栈
@@ -114,7 +115,7 @@ bun run dev
 | 组件 | 技术选型 | 说明 |
 |------|----------|------|
 | 运行时 | Bun | 快速、原生支持 TypeScript |
-| Web 框架 | Elysia | 轻量、类型安全、原生 WebSocket |
+| Web 框架 | Elysia | 轻量、类型安全、原生 SSE |
 | 构建工具 | Turborepo | Monorepo 构建编排 |
 | 落地页 | 纯 HTML | 无框架，扫码后的引导页 |
 | 桥接页 | 纯 HTML | 无框架，钱包 WebView 内运行 |
@@ -148,7 +149,7 @@ remote-inject/
 ├── packages/
 │   ├── server/                 # Relay 服务
 │   │   ├── src/
-│   │   │   ├── index.ts        # 入口，Elysia 应用 + WebSocket
+│   │   │   ├── index.ts        # 入口，Elysia 应用 + SSE/HTTP
 │   │   │   ├── session.ts      # Session 管理
 │   │   │   ├── template.ts     # 模板渲染 + i18n
 │   │   │   └── config.ts       # 外部配置加载器
@@ -170,7 +171,7 @@ remote-inject/
 │       │   ├── background.ts   # Service Worker
 │       │   ├── content.ts      # Content Script 桥接
 │       │   ├── injected.ts     # EIP-1193/6963 provider
-│       │   ├── offscreen/      # WebSocket 宿主（SDK）
+│       │   ├── offscreen/      # SSE + HTTP 宿主（SDK）
 │       │   └── popup/          # 插件弹窗 UI（Svelte）
 │       ├── wxt.config.ts
 │       └── package.json
@@ -185,10 +186,11 @@ remote-inject/
 
 | 端点 | 方法 | 说明 |
 |------|------|------|
-| `/session` | POST | 创建新 Session，返回 `{ id, url, expiresAt }` |
+| `/session` | POST | 创建新 Session，返回 `{ id, secret, url, expiresAt }` |
 | `/session/:id` | GET | 获取会话信息和状态 |
 | `/s/:id` | GET | 短链接，重定向到落地页 |
-| `/ws` | WS | WebSocket 连接，参数 `session` 和 `role` |
+| `/sse` | GET | SSE 连接（服务端→客户端推送），参数 `session`、`role`、`k` |
+| `/message` | POST | 发送消息（客户端→服务端），参数 `session`、`role`、`k` |
 | `/health` | GET | 健康检查端点 |
 | `/metrics` | GET | 服务器指标和统计 |
 | `/demo` | GET | 演示页面 |
@@ -319,6 +321,12 @@ HOST=0.0.0.0
 
 # 容量限制
 MAX_SESSIONS=10000
+
+# Session TTL（秒，可选——括号内为默认值）
+SESSION_CREDENTIAL_TTL=31536000   # 1 年   — session ID 长期有效，无需重新扫码
+SESSION_PENDING_TTL=300           # 5 分钟  — 等待首次连接
+SESSION_CONNECTED_TTL=604800      # 7 天   — 双方已连接
+SESSION_IDLE_TTL=3600             # 1 小时  — 双方均断开，清除 walletInfo
 
 # 外部配置目录（可选）
 CONFIG_DIR=/opt/remote-inject/config

@@ -846,7 +846,7 @@
     // Inline Provider code (simplified for demo)
     class RemoteProvider {
       constructor() {
-        this.ws = null
+        this.eventSource = null
         this.serverUrl = ''
         this.sessionId = ''
         this.sessionUrl = ''
@@ -858,9 +858,6 @@
         this._accounts = []
         this._connected = false
         this._userInitiatedDisconnect = false
-        this._reconnectAttempts = 0
-        this._maxReconnectAttempts = 5
-        this._reconnectDelay = 1000
 
         const events = ['connect', 'disconnect', 'chainChanged', 'accountsChanged', 'message', 'reconnecting']
         events.forEach(event => this.eventListeners.set(event, new Set()))
@@ -869,7 +866,6 @@
       async connect(serverUrl, metadata = {}) {
         this.serverUrl = serverUrl.replace(/\/$/, '')
         this._userInitiatedDisconnect = false
-        this._reconnectAttempts = 0
 
         const response = await fetch(`${this.serverUrl}/session`, {
           method: 'POST',
@@ -893,7 +889,7 @@
           this.secret = ''
         }
 
-        await this.connectWebSocket()
+        await this.connectSSE()
 
         // Save session for persistence
         saveSession({
@@ -917,7 +913,6 @@
         this.sessionUrl = sessionData.sessionUrl
         this.secret = sessionData.secret || ''
         this._userInitiatedDisconnect = false
-        this._reconnectAttempts = 0
 
         // Verify session is still valid
         const isValid = await checkSessionValid(this.sessionId)
@@ -926,7 +921,7 @@
           throw new Error('Session expired or invalid')
         }
 
-        await this.connectWebSocket()
+        await this.connectSSE()
 
         return {
           sessionId: this.sessionId,
@@ -934,63 +929,47 @@
         }
       }
 
-      connectWebSocket() {
+      connectSSE() {
         return new Promise((resolve, reject) => {
-          const wsUrl = this.serverUrl.replace(/^http/, 'ws')
-          this.ws = new WebSocket(`${wsUrl}/ws?session=${this.sessionId}&role=dapp`)
+          const sseUrl = `${this.serverUrl}/sse?session=${this.sessionId}&role=dapp`
+          const es = new EventSource(sseUrl)
+          this.eventSource = es
+
+          let resolved = false
 
           const timeout = setTimeout(() => {
-            reject(new Error('WebSocket connection timeout'))
-            this.ws?.close()
+            if (!resolved) {
+              es.close()
+              this.eventSource = null
+              reject(new Error('SSE connection timeout'))
+            }
           }, 10000)
 
-          this.ws.onopen = () => {
-            clearTimeout(timeout)
-            this._reconnectAttempts = 0  // Reset on successful connection
-          }
-
-          this.ws.onmessage = (event) => {
+          es.onmessage = (event) => {
             this.handleMessage(event.data)
-            try {
-              const msg = JSON.parse(event.data)
-              if (msg.type === 'ready') {
-                resolve()
-              }
-            } catch {}
-          }
-
-          this.ws.onclose = (event) => {
-            this._connected = false
-
-            // Don't reconnect if user initiated disconnect
-            if (this._userInitiatedDisconnect) {
-              this.emit('disconnect', { code: 4900, message: 'User disconnected', userInitiated: true })
-              return
-            }
-
-            // Try to reconnect for non-user-initiated disconnects
-            if (this._reconnectAttempts < this._maxReconnectAttempts) {
-              this._reconnectAttempts++
-              const delay = this._reconnectDelay * Math.pow(1.5, this._reconnectAttempts - 1)
-              console.log(`[RemoteProvider] Connection lost, reconnecting in ${delay}ms (attempt ${this._reconnectAttempts}/${this._maxReconnectAttempts})`)
-
-              this.emit('reconnecting', { attempt: this._reconnectAttempts, maxAttempts: this._maxReconnectAttempts })
-
-              setTimeout(() => {
-                if (!this._userInitiatedDisconnect) {
-                  this.connectWebSocket().catch(err => {
-                    console.error('[RemoteProvider] Reconnect failed:', err)
-                  })
+            if (!resolved) {
+              try {
+                const msg = JSON.parse(event.data)
+                if (msg.type === 'ready') {
+                  clearTimeout(timeout)
+                  resolved = true
+                  resolve()
                 }
-              }, delay)
-            } else {
-              this.emit('disconnect', { code: 4900, message: 'Connection lost', userInitiated: false })
+              } catch {}
             }
           }
 
-          this.ws.onerror = (error) => {
-            clearTimeout(timeout)
-            reject(new Error('WebSocket connection failed'))
+          es.onerror = () => {
+            if (!resolved) return
+
+            if (this._userInitiatedDisconnect) return
+
+            if (es.readyState === EventSource.CLOSED) {
+              this._connected = false
+              this.emit('disconnect', { code: 4900, message: 'Connection closed', userInitiated: false })
+            } else if (es.readyState === EventSource.CONNECTING) {
+              this.emit('reconnecting', { attempt: -1, maxAttempts: -1 })
+            }
           }
         })
       }
@@ -1089,7 +1068,7 @@
             })
         }
 
-        if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+        if (!this.eventSource || this.eventSource.readyState !== EventSource.OPEN) {
           throw { code: -32000, message: 'Not connected' }
         }
 
@@ -1101,9 +1080,9 @@
       }
 
       sendRequest(method, params) {
-        return new Promise((resolve, reject) => {
-          const id = ++this.requestId
+        const id = ++this.requestId
 
+        return new Promise((resolve, reject) => {
           const timeout = setTimeout(() => {
             this.pendingRequests.delete(id)
             reject({ code: -32003, message: 'Request timeout' })
@@ -1111,12 +1090,31 @@
 
           this.pendingRequests.set(id, { resolve, reject, timeout })
 
-          this.ws.send(JSON.stringify({
-            type: 'request',
-            id,
-            method,
-            params: params || [],
-          }))
+          fetch(`${this.serverUrl}/message?session=${this.sessionId}&role=dapp`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ type: 'request', id, method, params: params || [] }),
+          }).then(resp => {
+            if (!resp.ok) {
+              const pending = this.pendingRequests.get(id)
+              if (pending) {
+                clearTimeout(pending.timeout)
+                this.pendingRequests.delete(id)
+                resp.json().then(err => {
+                  pending.reject({ code: err.code || -32000, message: err.message || 'Request failed' })
+                }).catch(() => {
+                  pending.reject({ code: -32000, message: `Request failed: ${resp.status}` })
+                })
+              }
+            }
+          }).catch(err => {
+            const pending = this.pendingRequests.get(id)
+            if (pending) {
+              clearTimeout(pending.timeout)
+              this.pendingRequests.delete(id)
+              pending.reject({ code: -32003, message: 'Network error: ' + err.message })
+            }
+          })
         })
       }
 
@@ -1139,17 +1137,34 @@
       }
 
       disconnect() {
-        this._userInitiatedDisconnect = true  // Mark as user-initiated
-        if (this.ws) {
-          try {
-            this.ws.send(JSON.stringify({ type: 'disconnect', reason: 'User initiated' }))
-          } catch (e) {}
-          this.ws.close()
-          this.ws = null
+        this._userInitiatedDisconnect = true
+
+        // Notify server (fire-and-forget)
+        if (this.sessionId && this.serverUrl) {
+          fetch(`${this.serverUrl}/message?session=${this.sessionId}&role=dapp`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ type: 'disconnect', reason: 'User initiated' }),
+          }).catch(() => {})
         }
+
+        if (this.eventSource) {
+          this.eventSource.close()
+          this.eventSource = null
+        }
+
+        // Reject all pending requests
+        for (const pending of this.pendingRequests.values()) {
+          clearTimeout(pending.timeout)
+          pending.reject({ code: 4900, message: 'Disconnected' })
+        }
+        this.pendingRequests.clear()
+
         this._connected = false
         this._accounts = []
         clearSession()  // Clear stored session on user disconnect
+
+        this.emit('disconnect', { code: 4900, message: 'User disconnected', userInitiated: true })
       }
 
       get isConnected() {
@@ -1239,11 +1254,12 @@
       logResult(LOCALE === 'zh' ? `已切换到账户: ${abbrev}` : `Switched to account: ${abbrev}`, 'info')
 
       // Notify bridge about account switch
-      if (provider && provider.ws && provider.ws.readyState === WebSocket.OPEN) {
-        provider.ws.send(JSON.stringify({
-          type: 'accountSwitch',
-          address: address
-        }))
+      if (provider && provider.eventSource && provider.eventSource.readyState === EventSource.OPEN) {
+        fetch(`${provider.serverUrl}/message?session=${provider.sessionId}&role=dapp`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ type: 'accountSwitch', address }),
+        }).catch(() => {})
       }
     }
 
@@ -1409,7 +1425,7 @@
           updateStatus('disconnected', t('demo.notConnected'))
 
           // Only show connect button if user initiated or max reconnects reached
-          if (info.userInitiated || !provider || provider._reconnectAttempts >= provider._maxReconnectAttempts) {
+          if (info.userInitiated || !provider) {
             document.getElementById('connectBtn').classList.remove('hidden')
             document.getElementById('disconnectBtn').classList.add('hidden')
             document.getElementById('connectBtn').disabled = false
@@ -1545,7 +1561,7 @@
           logResult(LOCALE === 'zh' ? `已断开: ${info.message}` : `Disconnected: ${info.message}`, 'error')
           updateStatus('disconnected', t('demo.notConnected'))
 
-          if (info.userInitiated || !provider || provider._reconnectAttempts >= provider._maxReconnectAttempts) {
+          if (info.userInitiated || !provider) {
             document.getElementById('connectBtn').classList.remove('hidden')
             document.getElementById('disconnectBtn').classList.add('hidden')
             document.getElementById('connectBtn').disabled = false

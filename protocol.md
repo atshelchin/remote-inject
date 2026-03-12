@@ -1,19 +1,19 @@
 # Protocol Design
 
-Remote Inject uses a minimal JSON message protocol to relay messages between DApp and Mobile via WebSocket.
+Remote Inject uses a minimal JSON message protocol to relay messages between DApp and Mobile via SSE (Server-Sent Events) and HTTP POST.
 
 [中文文档](./protocol.zh.md)
 
 ## Overview
 
 ```
-┌─────────┐              ┌─────────┐              ┌─────────┐
-│  DApp   │◄────WS──────►│  Relay  │◄─────WS─────►│ Mobile  │
-│  SDK    │    JSON      │ Server  │    JSON      │ Bridge  │
-└─────────┘              └─────────┘              └─────────┘
+┌─────────┐    SSE+HTTP    ┌─────────┐    SSE+HTTP    ┌─────────┐
+│  DApp   │◄──────────────►│  Relay  │◄──────────────►│ Mobile  │
+│  SDK    │      JSON      │ Server  │      JSON      │ Bridge  │
+└─────────┘                └─────────┘                └─────────┘
 ```
 
-- **Transport Layer**: WebSocket (WS/WSS)
+- **Transport Layer**: SSE (Server-Sent Events) for server→client push; HTTP POST for client→server
 - **Message Format**: JSON
 - **Roles**: DApp and Mobile, transparently forwarded through Relay
 
@@ -21,7 +21,7 @@ Remote Inject uses a minimal JSON message protocol to relay messages between DAp
 
 ### Concept
 
-A Session is a connection session created by DApp and joined by Mobile. Each Session has a unique short ID.
+A Session is a connection session created by DApp and joined by Mobile. Each Session has a unique short ID and a secret key. Session credentials (ID + secret) are long-lived (1 year) so users don't need to re-scan the QR code after reconnecting.
 
 ### Create Session
 
@@ -35,7 +35,8 @@ Content-Type: application/json
 ```json
 {
   "id": "A7X3",
-  "url": "https://your-server.com/s/A7X3",
+  "secret": "KP74AHUHK48HEZXW",
+  "url": "https://your-server.com/s/A7X3?k=KP74AHUHK48HEZXW",
   "expiresAt": 1234567890000
 }
 ```
@@ -45,11 +46,17 @@ Content-Type: application/json
 ```typescript
 interface Session {
   id: string              // Short code, e.g., "A7X3"
+  secret: string          // Secret key for mobile auth (prevents brute-force)
   createdAt: number       // Creation time (Unix ms)
-  expiresAt: number       // Expiration time (Unix ms)
+  expiresAt: number       // Credential expiration (Unix ms, ~1 year)
+  stateExpiresAt: number  // State expiration (Unix ms, 7 days active / 1 hour idle)
   status: SessionStatus
-  dapp: WebSocket | null  // DApp connection
-  mobile: WebSocket | null // Mobile connection
+  walletInfo?: {          // Cached by server on mobile connect
+    address: string
+    chainId: number
+  }
+  mobileLocked: boolean   // Prevents mobile from being kicked
+  terminated: boolean     // Permanently closed by user
 }
 
 type SessionStatus =
@@ -69,27 +76,32 @@ type SessionStatus =
          └───┬───┘                      │
              │                          │
      DApp and Mobile                 Timeout
-      both connected                (5 minutes)
-             │                          │
-             ▼                          ▼
-       ┌───────────┐              ┌──────────┐
-       │ connected │              │Auto delete│
-       └─────┬─────┘              └──────────┘
+      both connected               (5 minutes)
+             │                    clear walletInfo
+             ▼                          │
+       ┌───────────┐                    ▼
+       │ connected │──── idle ────► clear walletInfo
+       └─────┬─────┘   (1 hour)    keep credential
              │
        Either party
-       disconnects or
-       timeout (24h)
+       disconnects
              │
              ▼
       ┌──────────────┐
       │ disconnected │
       └──────────────┘
              │
+             │ idle > 1 hour → clear walletInfo, keep credential (1 year)
+             │ credential expires (1 year) → delete session entirely
              ▼
-        ┌──────────┐
-        │Auto delete│
-        └──────────┘
 ```
+
+**Two-tier TTL design:**
+- **Credential TTL (1 year)**: Session ID + secret remain valid. Users never need to re-scan.
+- **State TTL**: `walletInfo` (address + chainId) is cleared when idle, but session persists.
+  - Pending: 5 minutes
+  - Active (both connected): 7 days
+  - Idle (both disconnected): 1 hour → clears walletInfo only
 
 ### Session ID Rules
 
@@ -103,12 +115,19 @@ Design considerations:
 - ~700,000 combinations, sufficient for short-term Sessions
 - Excludes easily confused characters to reduce user input errors
 
-## WebSocket Connection
+## SSE + HTTP Connection
 
-### Endpoint
+### Endpoints
 
+**SSE (server→client push):**
 ```
-ws://{host}/ws?session={sessionId}&role={role}
+GET /sse?session={sessionId}&role={role}[&k={secret}]
+```
+
+**Messages (client→server):**
+```
+POST /message?session={sessionId}&role={role}[&k={secret}]
+Content-Type: application/json
 ```
 
 **Parameters:**
@@ -117,32 +136,48 @@ ws://{host}/ws?session={sessionId}&role={role}
 |-----------|-------------|-------|
 | `session` | Session ID | e.g., `A7X3` |
 | `role` | Connection role | `dapp` or `mobile` |
+| `k` | Secret key | Required for `mobile` role |
 
 ### Connection Flow
 
 ```
 Client                                    Server
    │                                         │
-   │──────── WebSocket handshake ───────────►│
+   │──────── GET /sse (EventSource) ────────►│
    │                                         │
    │                              Verify Session exists
-   │                              Verify role is valid
-   │                              Register connection
+   │                              Verify role/secret valid
+   │                              Register SSE connection
    │                                         │
    │◄─────── { type: "ready" } ──────────────│
    │                                         │
-   │            Can start sending messages   │
+   │   (if walletInfo cached and DApp reconnecting)
+   │◄─────── { type: "connect", address, chainId } ──│
+   │                                         │
+   │     Send messages via POST /message     │
 ```
 
-### Error Responses
+### Server-Side `walletInfo` Caching
 
-Connection may return the following HTTP errors:
+When Mobile sends a `connect` message, the server:
+1. Stores `{ address, chainId }` in the session as `walletInfo`
+2. Forwards `connect` to DApp (if connected)
+
+When DApp reconnects (SSE reconnect), if `walletInfo` is cached:
+- Server immediately pushes a `connect` event to DApp — **no roundtrip to Mobile needed**
+
+This means Mobile only sends `connect` once (on first connection), even if either side reconnects.
+
+### Error Responses
 
 | Status Code | Description |
 |-------------|-------------|
 | 400 | Missing session or role parameter |
 | 400 | Invalid role value (must be dapp or mobile) |
+| 401 | Invalid or missing secret (mobile role) |
 | 404 | Session does not exist |
+| 410 | Session terminated (user disconnected) |
+| 503 | Server at capacity |
 
 ## Message Format
 
@@ -152,8 +187,8 @@ All messages are JSON objects and must include a `type` field.
 
 | type | Direction | Description |
 |------|-----------|-------------|
-| `ready` | Server → Client | Connection ready |
-| `connect` | Mobile → DApp | Wallet connected |
+| `ready` | Server → Client | SSE connection ready |
+| `connect` | Mobile → Server → DApp | Wallet connected |
 | `disconnect` | Bidirectional | Disconnect |
 | `request` | DApp → Mobile | RPC request |
 | `response` | Mobile → DApp | RPC response |
@@ -167,7 +202,7 @@ All messages are JSON objects and must include a `type` field.
 
 ### ready
 
-Connection ready notification, sent by Server after successful WebSocket handshake.
+Connection ready notification, sent by Server after successful SSE connection.
 
 ```typescript
 interface ReadyMessage {
@@ -184,7 +219,7 @@ Example:
 
 ### connect
 
-Wallet connection notification, sent by Mobile to DApp after receiving `ready`.
+Wallet connection notification, sent by Mobile to DApp on first connection.
 
 ```typescript
 interface ConnectMessage {
@@ -202,6 +237,8 @@ Example:
   "chainId": 1
 }
 ```
+
+> **Note:** Mobile only sends `connect` once. On subsequent DApp reconnections, the server delivers `connect` directly from its cached `walletInfo`.
 
 ---
 
@@ -223,15 +260,15 @@ Example:
 
 Common disconnect reasons:
 - `User initiated` - User actively disconnected
-- `Session expired` - Session expired
+- `Session terminated` - Session permanently closed
+- `Session expired` - Credential (1 year) expired
 - `Wallet disconnected` - Wallet disconnected
-- `Peer disconnected` - Remote party disconnected
 
 ---
 
 ### request
 
-RPC request, sent by DApp to Mobile.
+RPC request, sent by DApp to Mobile via POST.
 
 ```typescript
 interface RequestMessage {
@@ -266,7 +303,7 @@ Example:
 
 ### response
 
-RPC response, sent by Mobile to DApp.
+RPC response, sent by Mobile to DApp via POST.
 
 ```typescript
 interface ResponseMessage {
@@ -310,7 +347,7 @@ Failure example:
 
 ### chainChanged
 
-Chain change event, Mobile notifies DApp when user switches chain.
+Chain change event, Mobile notifies DApp when user switches chain. Server also updates cached `walletInfo.chainId`.
 
 ```typescript
 interface ChainChangedMessage {
@@ -328,7 +365,7 @@ Example:
 
 ### accountsChanged
 
-Account change event, Mobile notifies DApp when user switches account.
+Account change event, Mobile notifies DApp when user switches account. Server also updates cached `walletInfo.address`.
 
 ```typescript
 interface AccountsChangedMessage {
@@ -438,42 +475,59 @@ Follows EIP-1193 and EIP-1474 specifications.
 
 ## Complete Interaction Examples
 
-### Scenario: Send Transaction
+### Scenario: First Connection + Send Transaction
 
 ```
 Timeline          DApp                 Relay                Mobile
   │
   │  ─────────── POST /session ───────►
-  │  ◄──────────  { id: "A7X3" } ──────
+  │  ◄──────────  { id: "A7X3",
+  │                 secret: "KP74..." }
   │
-  │  Display QR code: https://xxx/s/A7X3
+  │  Display QR code: https://xxx/s/A7X3?k=KP74...
   │
   │                                                   User scans
   │                                                      │
-  │  ────────── WS connect ─────────────────►           │
-  │  ◄──────── ready ────────────────────────           │
-  │                                       ◄─── WS connect──┤
+  │  ────────── GET /sse?role=dapp ─────────────►        │
+  │  ◄──────── ready ────────────────────────────        │
+  │                                       ◄─── GET /sse?role=mobile&k=KP74...
   │                                       ──── ready ────►│
   │                                                      │
-  │                                       ◄── connect ───│
-  │  ◄──────── connect ──────────────────                │
+  │                                       ◄── POST /message (connect) ──│
+  │                           store walletInfo           │
+  │  ◄──────── connect ─────────────────────            │
   │            {address, chainId}                        │
   │                                                      │
-  │  Close QR code                                       │
-  │  Display "Connected"                                 │
+  │  Close QR code, display "Connected"                  │
   │                                                      │
-  │  ─── request ────────────────────────►               │
+  │  ─── POST /message (request) ───────────────►        │
   │      {id:1, method:"eth_sendTransaction"}            │
-  │                                       ─── request ──►│
+  │                                       ─── SSE ──────►│
   │                                                      │
   │                                            Show confirm dialog
   │                                            User clicks confirm
   │                                                      │
-  │                                       ◄── response ──│
-  │  ◄─── response ──────────────────────                │
+  │                                       ◄── POST /message (response) ─│
+  │  ◄─── SSE (response) ────────────────                │
   │       {id:1, result:"0xTxHash..."}                   │
   │                                                      │
   │  Display transaction success                         │
+```
+
+### Scenario: DApp Reconnect (walletInfo cached)
+
+```
+  DApp                    Relay                   Mobile
+   │                        │                        │
+   │  (page reload / SSE drop)                       │
+   │                        │                        │
+   │── GET /sse?role=dapp ──►│                        │
+   │◄── ready ───────────────│                        │
+   │                         │  walletInfo cached?    │
+   │◄── connect (from cache)─│  YES → push directly   │
+   │    {address, chainId}   │  (no roundtrip needed) │
+   │                        │                        │
+   │  Restored immediately   │                        │
 ```
 
 ### Scenario: User Rejection
@@ -481,15 +535,16 @@ Timeline          DApp                 Relay                Mobile
 ```
   DApp                    Relay                   Mobile
    │                        │                        │
-   │── request ────────────►│                        │
+   │── POST /message ───────►│                        │
    │   {id:2, method:"personal_sign"}                │
-   │                        │─── request ───────────►│
+   │                        │─── SSE ───────────────►│
    │                        │                        │
    │                        │               Show sign dialog
    │                        │               User clicks reject
    │                        │                        │
-   │                        │◄── response ───────────│
-   │◄─── response ──────────│    {id:2, error:4001}  │
+   │                        │◄── POST /message ───────│
+   │                        │    {id:2, error:4001}  │
+   │◄─── SSE (response) ────│                        │
    │     {id:2, error:{code:4001}}                   │
    │                        │                        │
    │  Catch UserRejected error                       │
@@ -502,8 +557,10 @@ Timeline          DApp                 Relay                Mobile
    │                        │                        │
    │                        │               User switches chain in wallet
    │                        │                        │
-   │                        │◄── chainChanged ───────│
-   │◄── chainChanged ───────│    {chainId: 137}      │
+   │                        │◄── POST /message ───────│
+   │                        │    {chainId: 137}      │
+   │                    update walletInfo.chainId     │
+   │◄── SSE (chainChanged) ─│                        │
    │    {chainId: 137}      │                        │
    │                        │                        │
    │  Update UI to show current chain                │
@@ -515,14 +572,16 @@ Timeline          DApp                 Relay                Mobile
 
 ### Transport Security
 
-- **Production must use WSS**: All WebSocket connections should be TLS encrypted
+- **Production must use HTTPS/TLS**: All SSE and POST requests should be TLS encrypted
 - Relay server should have valid SSL certificate
 
 ### Session Security
 
-- **Short validity**: pending Session expires in 5 minutes, connected Session expires in 24 hours
-- **Random ID**: Uses cryptographically secure random number generation
-- **Single use**: Each role can only have one connection
+- **Secret key**: Mobile must present the 16-character secret to connect. Prevents unauthorized access.
+- **Long credential TTL**: Session ID + secret valid for 1 year (users don't re-scan)
+- **Short state TTL**: `walletInfo` cleared after 1 hour idle — limits memory footprint
+- **Mobile lock**: Once a mobile client connects, it's locked in (no hijacking)
+- **Terminated flag**: Permanently closed sessions reject all new connections
 
 ### Message Security
 
@@ -544,10 +603,10 @@ The following security issues require user attention:
 
 Current protocol version: `1.0`
 
-For future version upgrades, version parameter can be added to WebSocket URL:
+For future version upgrades, version parameter can be added to the SSE URL:
 
 ```
-wss://xxx/ws?session=A7X3&role=dapp&v=2
+https://xxx/sse?session=A7X3&role=dapp&v=2
 ```
 
 Relay server should handle lower version clients with backward compatibility.

@@ -1,93 +1,105 @@
-import { describe, it, expect, beforeEach, afterEach, mock, spyOn } from 'bun:test'
+import { describe, it, expect, beforeEach, afterEach, mock } from 'bun:test'
 import { RemoteProvider, type DAppMetadata, type DisconnectInfo, type ReconnectInfo } from '../src/provider'
 
-// Mock WebSocket
-class MockWebSocket {
+// Mock EventSource (替代原来的 MockWebSocket)
+class MockEventSource {
   static CONNECTING = 0
   static OPEN = 1
-  static CLOSING = 2
-  static CLOSED = 3
+  static CLOSED = 2
 
   url: string
-  readyState: number = MockWebSocket.CONNECTING
-  onopen: ((event: Event) => void) | null = null
-  onclose: ((event: CloseEvent) => void) | null = null
-  onmessage: ((event: MessageEvent) => void) | null = null
+  readyState: number = MockEventSource.CONNECTING
+  onopen: (() => void) | null = null
+  onmessage: ((event: { data: string }) => void) | null = null
   onerror: ((event: Event) => void) | null = null
-
-  sentMessages: string[] = []
 
   constructor(url: string) {
     this.url = url
-    // Simulate async connection
+    // 模拟异步连接
     setTimeout(() => {
-      this.readyState = MockWebSocket.OPEN
-      this.onopen?.(new Event('open'))
+      this.readyState = MockEventSource.OPEN
+      this.onopen?.()
     }, 10)
   }
 
-  send(data: string) {
-    this.sentMessages.push(data)
+  close() {
+    this.readyState = MockEventSource.CLOSED
+    // EventSource.close() 不触发 onerror
   }
 
-  close(code?: number, reason?: string) {
-    this.readyState = MockWebSocket.CLOSED
-    this.onclose?.({ code: code || 1000, reason: reason || '' } as CloseEvent)
-  }
-
-  // Test helpers
+  // 测试辅助：模拟收到 SSE 消息
   simulateMessage(data: unknown) {
-    this.onmessage?.({ data: JSON.stringify(data) } as MessageEvent)
+    this.onmessage?.({ data: JSON.stringify(data) })
   }
 
-  simulateError() {
+  // 测试辅助：模拟连接错误
+  // permanent=true → readyState=CLOSED（服务端拒绝，停止重试）
+  // permanent=false → readyState=CONNECTING（网络抖动，自动重连）
+  simulateError(permanent = false) {
+    this.readyState = permanent ? MockEventSource.CLOSED : MockEventSource.CONNECTING
     this.onerror?.(new Event('error'))
   }
 }
 
-// Store original globals
-let originalFetch: typeof fetch
-let originalWebSocket: typeof WebSocket
+// 用于追踪 fetch 调用的帮助函数
+interface FetchCall {
+  url: string
+  method: string
+  body: any
+}
 
-// Mock fetch
-function createMockFetch(responses: Record<string, { ok: boolean; status: number; json?: () => unknown; statusText?: string }>) {
-  return mock(async (url: string, options?: RequestInit) => {
-    const urlPath = new URL(url).pathname
-    const response = responses[urlPath] || { ok: false, status: 404, statusText: 'Not Found' }
+function createTrackingFetch(
+  responses: Record<string, { ok: boolean; status: number; json?: () => unknown; statusText?: string }>
+) {
+  const calls: FetchCall[] = []
+  const fetchFn = mock(async (url: string, options?: RequestInit) => {
+    const urlObj = new URL(url)
+    const urlPath = urlObj.pathname
+    const body = options?.body ? JSON.parse(options.body as string) : undefined
+    calls.push({ url: urlPath, method: options?.method || 'GET', body })
+    const response = responses[urlPath] || { ok: true, status: 200 }
     return {
       ok: response.ok,
       status: response.status,
       statusText: response.statusText || '',
       json: async () => response.json?.() || {},
+      text: async () => 'OK',
     }
   }) as unknown as typeof fetch
+  return { fetchFn, calls }
 }
+
+// Store original globals
+let originalFetch: typeof fetch
+let originalEventSource: typeof EventSource
+
+let mockES: MockEventSource | null = null
 
 describe('RemoteProvider', () => {
   let provider: RemoteProvider
-  let mockWs: MockWebSocket | null = null
 
   beforeEach(() => {
     provider = new RemoteProvider()
+    mockES = null
 
-    // Mock WebSocket
-    originalWebSocket = globalThis.WebSocket
-    ;(globalThis as any).WebSocket = class extends MockWebSocket {
+    // Mock EventSource
+    originalEventSource = globalThis.EventSource
+    ;(globalThis as any).EventSource = class extends MockEventSource {
       constructor(url: string) {
         super(url)
-        mockWs = this
+        mockES = this
       }
     }
 
-    // Mock fetch
+    // Store original fetch
     originalFetch = globalThis.fetch
   })
 
   afterEach(() => {
     provider.disconnect()
-    globalThis.WebSocket = originalWebSocket
+    globalThis.EventSource = originalEventSource
     globalThis.fetch = originalFetch
-    mockWs = null
+    mockES = null
   })
 
   describe('constructor', () => {
@@ -98,7 +110,6 @@ describe('RemoteProvider', () => {
     })
 
     it('should initialize event listeners', () => {
-      // Should not throw when adding listeners
       expect(() => provider.on('connect', () => {})).not.toThrow()
       expect(() => provider.on('disconnect', () => {})).not.toThrow()
       expect(() => provider.on('chainChanged', () => {})).not.toThrow()
@@ -107,22 +118,22 @@ describe('RemoteProvider', () => {
   })
 
   describe('connect', () => {
-    it('should create session and connect WebSocket', async () => {
-      globalThis.fetch = createMockFetch({
+    it('should create session and open SSE connection', async () => {
+      const { fetchFn } = createTrackingFetch({
         '/session': {
           ok: true,
           status: 200,
           json: () => ({ id: 'ABCD', url: 'http://localhost:3000/s/ABCD?k=secret123' }),
         },
       })
+      globalThis.fetch = fetchFn
 
       const connectPromise = provider.connect('http://localhost:3000', { name: 'Test App', url: 'http://test.com' })
 
-      // Wait for WebSocket to connect
+      // Wait for EventSource to "open"
       await new Promise((r) => setTimeout(r, 20))
-
-      // Simulate ready message
-      mockWs?.simulateMessage({ type: 'ready' })
+      // Simulate ready message from server
+      mockES?.simulateMessage({ type: 'ready' })
 
       const result = await connectPromise
 
@@ -131,50 +142,49 @@ describe('RemoteProvider', () => {
     })
 
     it('should throw error if session creation fails', async () => {
-      globalThis.fetch = createMockFetch({
+      const { fetchFn } = createTrackingFetch({
         '/session': {
           ok: false,
           status: 500,
           statusText: 'Internal Server Error',
         },
       })
+      globalThis.fetch = fetchFn
 
       await expect(provider.connect('http://localhost:3000')).rejects.toThrow('Failed to create session')
     })
 
     it('should strip trailing slash from server URL', async () => {
-      globalThis.fetch = createMockFetch({
+      const { fetchFn } = createTrackingFetch({
         '/session': {
           ok: true,
           status: 200,
           json: () => ({ id: 'ABCD', url: 'http://localhost:3000/s/ABCD?k=secret' }),
         },
       })
+      globalThis.fetch = fetchFn
 
       const connectPromise = provider.connect('http://localhost:3000/')
 
       await new Promise((r) => setTimeout(r, 20))
-      mockWs?.simulateMessage({ type: 'ready' })
+      mockES?.simulateMessage({ type: 'ready' })
 
       await connectPromise
 
-      // WebSocket URL path should not have double slashes (ignore protocol ://)
-      // Check that path portion doesn't start with //
-      const urlPath = mockWs?.url?.replace(/^wss?:\/\/[^/]+/, '') || ''
+      // SSE URL path should not have double slashes
+      const urlPath = mockES?.url?.replace(/^https?:\/\/[^/]+/, '') || ''
       expect(urlPath).not.toMatch(/^\/\//)
     })
 
     it('should send metadata in POST body', async () => {
-      let capturedBody: string | undefined
-
-      globalThis.fetch = mock(async (url: string, options?: RequestInit) => {
-        capturedBody = options?.body as string
-        return {
+      const { fetchFn, calls } = createTrackingFetch({
+        '/session': {
           ok: true,
           status: 200,
-          json: async () => ({ id: 'ABCD', url: 'http://localhost:3000/s/ABCD?k=secret' }),
-        }
-      }) as unknown as typeof fetch
+          json: () => ({ id: 'ABCD', url: 'http://localhost:3000/s/ABCD?k=secret' }),
+        },
+      })
+      globalThis.fetch = fetchFn
 
       const metadata: DAppMetadata = {
         name: 'Test DApp',
@@ -185,23 +195,23 @@ describe('RemoteProvider', () => {
       const connectPromise = provider.connect('http://localhost:3000', metadata)
 
       await new Promise((r) => setTimeout(r, 20))
-      mockWs?.simulateMessage({ type: 'ready' })
+      mockES?.simulateMessage({ type: 'ready' })
 
       await connectPromise
 
-      expect(capturedBody).toBeDefined()
-      const parsed = JSON.parse(capturedBody!)
-      expect(parsed.name).toBe('Test DApp')
-      expect(parsed.url).toBe('https://testdapp.com')
-      expect(parsed.icon).toBe('https://testdapp.com/icon.png')
+      const sessionCall = calls.find(c => c.url === '/session' && c.method === 'POST')
+      expect(sessionCall?.body?.name).toBe('Test DApp')
+      expect(sessionCall?.body?.url).toBe('https://testdapp.com')
+      expect(sessionCall?.body?.icon).toBe('https://testdapp.com/icon.png')
     })
   })
 
   describe('resumeSession', () => {
-    it('should check session exists and connect', async () => {
-      globalThis.fetch = createMockFetch({
+    it('should check session exists and open SSE', async () => {
+      const { fetchFn } = createTrackingFetch({
         '/session/ABCD': { ok: true, status: 200, json: () => ({ id: 'ABCD' }) },
       })
+      globalThis.fetch = fetchFn
 
       const resumePromise = provider.resumeSession({
         serverUrl: 'http://localhost:3000',
@@ -210,7 +220,7 @@ describe('RemoteProvider', () => {
       })
 
       await new Promise((r) => setTimeout(r, 20))
-      mockWs?.simulateMessage({ type: 'ready' })
+      mockES?.simulateMessage({ type: 'ready' })
 
       await resumePromise
 
@@ -218,9 +228,10 @@ describe('RemoteProvider', () => {
     })
 
     it('should throw if session not found', async () => {
-      globalThis.fetch = createMockFetch({
+      const { fetchFn } = createTrackingFetch({
         '/session/ABCD': { ok: false, status: 404 },
       })
+      globalThis.fetch = fetchFn
 
       await expect(
         provider.resumeSession({
@@ -233,19 +244,23 @@ describe('RemoteProvider', () => {
   })
 
   describe('disconnect', () => {
-    it('should close WebSocket and reset state', async () => {
-      globalThis.fetch = createMockFetch({
+    beforeEach(async () => {
+      const { fetchFn } = createTrackingFetch({
         '/session': { ok: true, status: 200, json: () => ({ id: 'ABCD', url: 'http://localhost:3000/s/ABCD?k=secret' }) },
+        '/message': { ok: true, status: 200 },
       })
+      globalThis.fetch = fetchFn
 
       const connectPromise = provider.connect('http://localhost:3000')
       await new Promise((r) => setTimeout(r, 20))
-      mockWs?.simulateMessage({ type: 'ready' })
+      mockES?.simulateMessage({ type: 'ready' })
       await connectPromise
 
       // Simulate mobile connection
-      mockWs?.simulateMessage({ type: 'connect', address: '0x123', chainId: 1 })
+      mockES?.simulateMessage({ type: 'connect', address: '0x123', chainId: 1 })
+    })
 
+    it('should close SSE connection and reset state', () => {
       expect(provider.isConnected).toBe(true)
 
       provider.disconnect()
@@ -254,34 +269,20 @@ describe('RemoteProvider', () => {
       expect(provider.accounts).toEqual([])
     })
 
-    it('should send disconnect message before closing', async () => {
-      globalThis.fetch = createMockFetch({
-        '/session': { ok: true, status: 200, json: () => ({ id: 'ABCD', url: 'http://localhost:3000/s/ABCD?k=secret' }) },
+    it('should send disconnect message via POST before closing', () => {
+      // Set up a fresh tracking fetch that captures disconnect call
+      const { fetchFn, calls } = createTrackingFetch({
+        '/message': { ok: true, status: 200 },
       })
-
-      const connectPromise = provider.connect('http://localhost:3000')
-      await new Promise((r) => setTimeout(r, 20))
-      mockWs?.simulateMessage({ type: 'ready' })
-      await connectPromise
+      globalThis.fetch = fetchFn
 
       provider.disconnect()
 
-      const lastMessage = mockWs?.sentMessages[mockWs.sentMessages.length - 1]
-      expect(lastMessage).toBeDefined()
-      const parsed = JSON.parse(lastMessage!)
-      expect(parsed.type).toBe('disconnect')
+      const disconnectCall = calls.find(c => c.url === '/message' && c.body?.type === 'disconnect')
+      expect(disconnectCall).toBeDefined()
     })
 
-    it('should emit disconnect event with userInitiated flag', async () => {
-      globalThis.fetch = createMockFetch({
-        '/session': { ok: true, status: 200, json: () => ({ id: 'ABCD', url: 'http://localhost:3000/s/ABCD?k=secret' }) },
-      })
-
-      const connectPromise = provider.connect('http://localhost:3000')
-      await new Promise((r) => setTimeout(r, 20))
-      mockWs?.simulateMessage({ type: 'ready' })
-      await connectPromise
-
+    it('should emit disconnect event with userInitiated flag', () => {
       let disconnectInfo: DisconnectInfo | null = null
       provider.on('disconnect', (info: DisconnectInfo) => {
         disconnectInfo = info
@@ -289,27 +290,43 @@ describe('RemoteProvider', () => {
 
       provider.disconnect()
 
-      // Wait for async event
-      await new Promise((r) => setTimeout(r, 10))
-
+      // disconnect() emits synchronously in new implementation
       expect(disconnectInfo).toBeDefined()
       expect(disconnectInfo!.userInitiated).toBe(true)
     })
   })
 
   describe('request', () => {
+    let capturedMessages: any[]
+
     beforeEach(async () => {
-      globalThis.fetch = createMockFetch({
-        '/session': { ok: true, status: 200, json: () => ({ id: 'ABCD', url: 'http://localhost:3000/s/ABCD?k=secret' }) },
-      })
+      capturedMessages = []
+
+      // Comprehensive fetch mock that tracks /message POST calls
+      globalThis.fetch = mock(async (url: string, options?: RequestInit) => {
+        const urlPath = new URL(url).pathname
+        if (urlPath === '/session') {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({ id: 'ABCD', url: 'http://localhost:3000/s/ABCD?k=secret' }),
+          } as any
+        }
+        if (urlPath === '/message') {
+          const body = JSON.parse(options?.body as string)
+          capturedMessages.push(body)
+          return { ok: true, status: 200, text: async () => 'OK' } as any
+        }
+        return { ok: false, status: 404, statusText: 'Not Found' } as any
+      }) as unknown as typeof fetch
 
       const connectPromise = provider.connect('http://localhost:3000')
       await new Promise((r) => setTimeout(r, 20))
-      mockWs?.simulateMessage({ type: 'ready' })
+      mockES?.simulateMessage({ type: 'ready' })
       await connectPromise
 
       // Simulate mobile connection
-      mockWs?.simulateMessage({ type: 'connect', address: '0x1234567890abcdef', chainId: 1 })
+      mockES?.simulateMessage({ type: 'connect', address: '0x1234567890abcdef', chainId: 1 })
     })
 
     it('should return accounts for eth_accounts', async () => {
@@ -327,26 +344,22 @@ describe('RemoteProvider', () => {
       expect(result).toEqual(['0x1234567890abcdef'])
     })
 
-    it('should send request via WebSocket for personal_sign', async () => {
+    it('should send request via HTTP POST for personal_sign', async () => {
       const requestPromise = provider.request({
         method: 'personal_sign',
         params: ['0x48656c6c6f', '0x1234567890abcdef'],
       })
 
-      // Wait for request to be sent
+      // Wait for the POST to fire
       await new Promise((r) => setTimeout(r, 10))
 
-      // Find the request message
-      const requestMsg = mockWs?.sentMessages.find((m) => {
-        const parsed = JSON.parse(m)
-        return parsed.type === 'request' && parsed.method === 'personal_sign'
-      })
-
+      const requestMsg = capturedMessages.find(
+        (m) => m.type === 'request' && m.method === 'personal_sign'
+      )
       expect(requestMsg).toBeDefined()
 
-      // Simulate response
-      const parsed = JSON.parse(requestMsg!)
-      mockWs?.simulateMessage({ type: 'response', id: parsed.id, result: '0xsignature123' })
+      // Simulate response arriving via SSE
+      mockES?.simulateMessage({ type: 'response', id: requestMsg!.id, result: '0xsignature123' })
 
       const result = await requestPromise
       expect(result).toBe('0xsignature123')
@@ -360,15 +373,12 @@ describe('RemoteProvider', () => {
 
       await new Promise((r) => setTimeout(r, 10))
 
-      const requestMsg = mockWs?.sentMessages.find((m) => {
-        const parsed = JSON.parse(m)
-        return parsed.type === 'request'
-      })
+      const requestMsg = capturedMessages.find((m) => m.type === 'request')
+      expect(requestMsg).toBeDefined()
 
-      const parsed = JSON.parse(requestMsg!)
-      mockWs?.simulateMessage({
+      mockES?.simulateMessage({
         type: 'response',
-        id: parsed.id,
+        id: requestMsg!.id,
         error: { code: 4001, message: 'User rejected' },
       })
 
@@ -383,20 +393,20 @@ describe('RemoteProvider', () => {
 
       await expect(provider.request({ method: 'personal_sign', params: [] })).rejects.toMatchObject({
         code: -32000,
-        message: 'Not connected',
       })
     })
   })
 
   describe('event handling', () => {
     it('should emit connect event with chainId', async () => {
-      globalThis.fetch = createMockFetch({
+      const { fetchFn } = createTrackingFetch({
         '/session': { ok: true, status: 200, json: () => ({ id: 'ABCD', url: 'http://localhost:3000/s/ABCD?k=secret' }) },
       })
+      globalThis.fetch = fetchFn
 
       const connectPromise = provider.connect('http://localhost:3000')
       await new Promise((r) => setTimeout(r, 20))
-      mockWs?.simulateMessage({ type: 'ready' })
+      mockES?.simulateMessage({ type: 'ready' })
       await connectPromise
 
       let connectInfo: { chainId: string } | null = null
@@ -404,19 +414,20 @@ describe('RemoteProvider', () => {
         connectInfo = info
       })
 
-      mockWs?.simulateMessage({ type: 'connect', address: '0x123', chainId: 137 })
+      mockES?.simulateMessage({ type: 'connect', address: '0x123', chainId: 137 })
 
       expect(connectInfo).toEqual({ chainId: '0x89' })
     })
 
     it('should emit accountsChanged on connect', async () => {
-      globalThis.fetch = createMockFetch({
+      const { fetchFn } = createTrackingFetch({
         '/session': { ok: true, status: 200, json: () => ({ id: 'ABCD', url: 'http://localhost:3000/s/ABCD?k=secret' }) },
       })
+      globalThis.fetch = fetchFn
 
       const connectPromise = provider.connect('http://localhost:3000')
       await new Promise((r) => setTimeout(r, 20))
-      mockWs?.simulateMessage({ type: 'ready' })
+      mockES?.simulateMessage({ type: 'ready' })
       await connectPromise
 
       let accounts: string[] = []
@@ -424,44 +435,41 @@ describe('RemoteProvider', () => {
         accounts = accts
       })
 
-      mockWs?.simulateMessage({ type: 'connect', address: '0xabcdef', chainId: 1 })
+      mockES?.simulateMessage({ type: 'connect', address: '0xabcdef', chainId: 1 })
 
       expect(accounts).toEqual(['0xabcdef'])
     })
 
     it('should emit chainChanged event', async () => {
-      globalThis.fetch = createMockFetch({
+      const { fetchFn } = createTrackingFetch({
         '/session': { ok: true, status: 200, json: () => ({ id: 'ABCD', url: 'http://localhost:3000/s/ABCD?k=secret' }) },
       })
+      globalThis.fetch = fetchFn
 
       const connectPromise = provider.connect('http://localhost:3000')
       await new Promise((r) => setTimeout(r, 20))
-      mockWs?.simulateMessage({ type: 'ready' })
+      mockES?.simulateMessage({ type: 'ready' })
       await connectPromise
-      mockWs?.simulateMessage({ type: 'connect', address: '0x123', chainId: 1 })
+      mockES?.simulateMessage({ type: 'connect', address: '0x123', chainId: 1 })
 
       let newChainId = ''
       provider.on('chainChanged', (chainId) => {
         newChainId = chainId
       })
 
-      mockWs?.simulateMessage({ type: 'chainChanged', chainId: 56 })
+      mockES?.simulateMessage({ type: 'chainChanged', chainId: 56 })
 
       expect(newChainId).toBe('0x38')
       expect(provider.chainId).toBe('0x38')
     })
 
-    it('should remove listener correctly', async () => {
+    it('should remove listener correctly', () => {
       let callCount = 0
-      const listener = () => {
-        callCount++
-      }
+      const listener = () => { callCount++ }
 
       provider.on('chainChanged', listener)
       provider.removeListener('chainChanged', listener)
 
-      // Manually trigger event (simulate message won't work without connection)
-      // This tests the event system directly
       ;(provider as any).emit('chainChanged', '0x1')
 
       expect(callCount).toBe(0)
@@ -470,13 +478,14 @@ describe('RemoteProvider', () => {
 
   describe('state getters', () => {
     it('should return session info', async () => {
-      globalThis.fetch = createMockFetch({
+      const { fetchFn } = createTrackingFetch({
         '/session': { ok: true, status: 200, json: () => ({ id: 'WXYZ', url: 'http://localhost:3000/s/WXYZ?k=key123' }) },
       })
+      globalThis.fetch = fetchFn
 
       const connectPromise = provider.connect('http://localhost:3000')
       await new Promise((r) => setTimeout(r, 20))
-      mockWs?.simulateMessage({ type: 'ready' })
+      mockES?.simulateMessage({ type: 'ready' })
       await connectPromise
 
       expect(provider.session.id).toBe('WXYZ')
@@ -484,13 +493,14 @@ describe('RemoteProvider', () => {
     })
 
     it('should return session data for persistence', async () => {
-      globalThis.fetch = createMockFetch({
+      const { fetchFn } = createTrackingFetch({
         '/session': { ok: true, status: 200, json: () => ({ id: 'WXYZ', url: 'http://localhost:3000/s/WXYZ?k=key123' }) },
       })
+      globalThis.fetch = fetchFn
 
       const connectPromise = provider.connect('http://localhost:3000')
       await new Promise((r) => setTimeout(r, 20))
-      mockWs?.simulateMessage({ type: 'ready' })
+      mockES?.simulateMessage({ type: 'ready' })
       await connectPromise
 
       const data = provider.getSessionData()
@@ -502,30 +512,33 @@ describe('RemoteProvider', () => {
   })
 
   describe('reconnection logic', () => {
-    it('should not reconnect on user-initiated disconnect', async () => {
-      globalThis.fetch = createMockFetch({
+    it('should not be reconnecting after user-initiated disconnect', async () => {
+      const { fetchFn } = createTrackingFetch({
         '/session': { ok: true, status: 200, json: () => ({ id: 'ABCD', url: 'http://localhost:3000/s/ABCD?k=secret' }) },
+        '/message': { ok: true, status: 200 },
       })
+      globalThis.fetch = fetchFn
 
       const connectPromise = provider.connect('http://localhost:3000')
       await new Promise((r) => setTimeout(r, 20))
-      mockWs?.simulateMessage({ type: 'ready' })
+      mockES?.simulateMessage({ type: 'ready' })
       await connectPromise
 
       provider.disconnect()
 
-      // _reconnecting should be false
+      // _reconnecting should be false (eventSource is null)
       expect((provider as any)._reconnecting).toBe(false)
     })
 
-    it('should not reconnect on session rejected (code 1008)', async () => {
-      globalThis.fetch = createMockFetch({
+    it('should not reconnect on permanent SSE close', async () => {
+      const { fetchFn } = createTrackingFetch({
         '/session': { ok: true, status: 200, json: () => ({ id: 'ABCD', url: 'http://localhost:3000/s/ABCD?k=secret' }) },
       })
+      globalThis.fetch = fetchFn
 
       const connectPromise = provider.connect('http://localhost:3000')
       await new Promise((r) => setTimeout(r, 20))
-      mockWs?.simulateMessage({ type: 'ready' })
+      mockES?.simulateMessage({ type: 'ready' })
       await connectPromise
 
       let disconnectInfo: DisconnectInfo | null = null
@@ -533,23 +546,25 @@ describe('RemoteProvider', () => {
         disconnectInfo = info
       })
 
-      // Simulate server closing connection with 1008 (policy violation)
-      mockWs?.close(1008, 'Session rejected')
+      // Simulate permanent close (e.g. server rejects — readyState = CLOSED)
+      mockES?.simulateError(true)
 
       await new Promise((r) => setTimeout(r, 10))
 
-      expect(disconnectInfo?.code).toBe(1008)
+      expect(disconnectInfo).toBeDefined()
+      expect(disconnectInfo!.userInitiated).toBe(false)
       expect((provider as any)._reconnecting).toBe(false)
     })
 
-    it('should emit reconnecting event on connection loss', async () => {
-      globalThis.fetch = createMockFetch({
+    it('should emit reconnecting event on transient connection loss', async () => {
+      const { fetchFn } = createTrackingFetch({
         '/session': { ok: true, status: 200, json: () => ({ id: 'ABCD', url: 'http://localhost:3000/s/ABCD?k=secret' }) },
       })
+      globalThis.fetch = fetchFn
 
       const connectPromise = provider.connect('http://localhost:3000')
       await new Promise((r) => setTimeout(r, 20))
-      mockWs?.simulateMessage({ type: 'ready' })
+      mockES?.simulateMessage({ type: 'ready' })
       await connectPromise
 
       let reconnectInfo: ReconnectInfo | null = null
@@ -557,52 +572,51 @@ describe('RemoteProvider', () => {
         reconnectInfo = info
       })
 
-      // Simulate connection lost (not user-initiated, not rejected)
-      mockWs?.close(1006, 'Connection lost')
+      // Simulate transient drop (EventSource auto-reconnecting)
+      mockES?.simulateError(false)
 
       await new Promise((r) => setTimeout(r, 10))
 
       expect(reconnectInfo).toBeDefined()
-      expect(reconnectInfo!.attempt).toBe(1)
-      expect(reconnectInfo!.maxAttempts).toBe(5)
     })
   })
 
   describe('message handling', () => {
     beforeEach(async () => {
-      globalThis.fetch = createMockFetch({
+      const { fetchFn } = createTrackingFetch({
         '/session': { ok: true, status: 200, json: () => ({ id: 'ABCD', url: 'http://localhost:3000/s/ABCD?k=secret' }) },
       })
+      globalThis.fetch = fetchFn
 
       const connectPromise = provider.connect('http://localhost:3000')
       await new Promise((r) => setTimeout(r, 20))
-      mockWs?.simulateMessage({ type: 'ready' })
+      mockES?.simulateMessage({ type: 'ready' })
       await connectPromise
     })
 
     it('should handle disconnect message from peer', () => {
-      mockWs?.simulateMessage({ type: 'connect', address: '0x123', chainId: 1 })
+      mockES?.simulateMessage({ type: 'connect', address: '0x123', chainId: 1 })
 
       let disconnectInfo: DisconnectInfo | null = null
       provider.on('disconnect', (info) => {
         disconnectInfo = info
       })
 
-      mockWs?.simulateMessage({ type: 'disconnect', reason: 'Peer closed' })
+      mockES?.simulateMessage({ type: 'disconnect', reason: 'Peer closed' })
 
       expect(provider.isConnected).toBe(false)
       expect(disconnectInfo?.userInitiated).toBe(false)
     })
 
     it('should handle accountsChanged with empty accounts', () => {
-      mockWs?.simulateMessage({ type: 'connect', address: '0x123', chainId: 1 })
+      mockES?.simulateMessage({ type: 'connect', address: '0x123', chainId: 1 })
 
       let disconnectCalled = false
       provider.on('disconnect', () => {
         disconnectCalled = true
       })
 
-      mockWs?.simulateMessage({ type: 'accountsChanged', accounts: [] })
+      mockES?.simulateMessage({ type: 'accountsChanged', accounts: [] })
 
       expect(provider.isConnected).toBe(false)
       expect(provider.accounts).toEqual([])
@@ -610,13 +624,12 @@ describe('RemoteProvider', () => {
     })
 
     it('should handle malformed messages gracefully', () => {
-      // Should not throw
       expect(() => {
-        mockWs?.onmessage?.({ data: 'not json' } as MessageEvent)
+        mockES?.onmessage?.({ data: 'not json' })
       }).not.toThrow()
 
       expect(() => {
-        mockWs?.onmessage?.({ data: '{"type": "unknown"}' } as MessageEvent)
+        mockES?.onmessage?.({ data: '{"type": "unknown"}' })
       }).not.toThrow()
     })
   })
@@ -629,7 +642,6 @@ describe('RemoteProvider - Types Export', () => {
     expect(module.RemoteProvider).toBeDefined()
     expect(typeof module.RemoteProvider).toBe('function')
 
-    // Type checking at runtime
     const provider = new module.RemoteProvider()
     expect(provider).toBeInstanceOf(module.RemoteProvider)
   })

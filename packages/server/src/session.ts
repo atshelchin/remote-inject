@@ -1,5 +1,3 @@
-import type { ServerWebSocket } from 'bun'
-
 export type SessionStatus = 'pending' | 'connected' | 'disconnected'
 
 // DApp 元数据（展示给用户看的）
@@ -9,22 +7,48 @@ export interface DAppMetadata {
   icon?: string       // 图标 URL（可选）
 }
 
+// 移动端钱包状态（缓存用于重连恢复）
+export interface WalletInfo {
+  address: string
+  chainId: number
+}
+
+// SSE 连接控制器（替代 ServerWebSocket）
+type SSEController = ReadableStreamDefaultController<Uint8Array>
+
+const encoder = new TextEncoder()
+
+// 向 SSE 流发送事件
+export function sendSSE(controller: SSEController, data: object): void {
+  try {
+    controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`))
+  } catch {
+    // 控制器可能已关闭
+  }
+}
+
+// 关闭 SSE 流
+function closeSSE(controller: SSEController): void {
+  try {
+    controller.close()
+  } catch {
+    // 已经关闭
+  }
+}
+
 export interface Session {
   id: string
   secret: string            // 移动端连接需要的密钥（防止暴力枚举）
   createdAt: number
-  expiresAt: number
+  expiresAt: number         // 证书过期时间（默认 1 年），到期后删除整个 session，用户需重新扫码
+  stateExpiresAt: number    // 状态过期时间（活跃时 7 天，闲置时 1 小时），到期后仅清除 walletInfo，session 本身不删除
   status: SessionStatus
-  dapp: ServerWebSocket<WebSocketData> | null
-  mobile: ServerWebSocket<WebSocketData> | null
+  dapp: SSEController | null
+  mobile: SSEController | null
   metadata?: DAppMetadata   // DApp 信息
+  walletInfo?: WalletInfo   // 移动端钱包状态（缓存，用于重连时恢复）
   mobileLocked: boolean     // 移动端是否已锁定（防止被踢）
   terminated: boolean       // 是否已被用户主动终止（不可再连接）
-}
-
-export interface WebSocketData {
-  sessionId: string
-  role: 'dapp' | 'mobile'
 }
 
 // 排除易混淆字符 (0/O/1/I/L)
@@ -33,8 +57,10 @@ const SESSION_ID_LENGTH = 4
 const SECRET_LENGTH = 16    // 16 位密钥，用于防止暴力枚举
 
 // 过期时间（可通过环境变量配置，单位：秒）
-const PENDING_TIMEOUT = parseInt(process.env.SESSION_PENDING_TTL || '300', 10) * 1000        // 默认 5 分钟
-const CONNECTED_TIMEOUT = parseInt(process.env.SESSION_CONNECTED_TTL || '604800', 10) * 1000 // 默认 7 天
+const CREDENTIAL_TIMEOUT = parseInt(process.env.SESSION_CREDENTIAL_TTL || '31536000', 10) * 1000  // 证书 TTL：1 年（session ID + secret 保持有效，无需重新扫码）
+const STATE_PENDING_TIMEOUT = parseInt(process.env.SESSION_PENDING_TTL || '300', 10) * 1000       // 状态 TTL（等待连接）：5 分钟
+const STATE_CONNECTED_TIMEOUT = parseInt(process.env.SESSION_CONNECTED_TTL || '604800', 10) * 1000 // 状态 TTL（已连接）：7 天
+const IDLE_TIMEOUT = parseInt(process.env.SESSION_IDLE_TTL || '3600', 10) * 1000                  // 状态 TTL（双方断开）：1 小时
 
 // 容量限制（可通过环境变量配置）
 const MAX_SESSIONS = parseInt(process.env.MAX_SESSIONS || '10000', 10)
@@ -106,7 +132,8 @@ export function createSession(metadata?: DAppMetadata): Session {
     id: generateSessionId(),
     secret: generateSecret(),
     createdAt: now,
-    expiresAt: now + PENDING_TIMEOUT,
+    expiresAt: now + CREDENTIAL_TIMEOUT,          // 证书 1 年有效，无需重新扫码
+    stateExpiresAt: now + STATE_PENDING_TIMEOUT,  // 状态初始 5 分钟（等待连接）
     status: 'pending',
     dapp: null,
     mobile: null,
@@ -142,12 +169,12 @@ export function isMobileLocked(sessionId: string): boolean {
   return session.mobileLocked
 }
 
-// 注册 WebSocket 连接
+// 注册 SSE 连接
 // 对于 mobile 角色，需要先调用 verifySecret 验证密钥
 export function registerConnection(
   sessionId: string,
   role: 'dapp' | 'mobile',
-  ws: ServerWebSocket<WebSocketData>
+  controller: SSEController
 ): Session | null {
   const session = sessions.get(sessionId)
   if (!session) return null
@@ -158,27 +185,27 @@ export function registerConnection(
   }
 
   if (role === 'dapp') {
-    session.dapp = ws
+    session.dapp = controller
   } else {
     // 移动端连接：检查是否已被锁定
     if (session.mobileLocked && session.mobile) {
       // 已有移动端连接，拒绝新连接
       return null
     }
-    session.mobile = ws
+    session.mobile = controller
     session.mobileLocked = true  // 锁定，防止被踢
   }
 
-  // 双方都连接后，更新状态和过期时间
+  // 双方都连接后，延长状态有效期
   if (session.dapp && session.mobile) {
     session.status = 'connected'
-    session.expiresAt = Date.now() + CONNECTED_TIMEOUT
+    session.stateExpiresAt = Date.now() + STATE_CONNECTED_TIMEOUT
   }
 
   return session
 }
 
-// 注销 WebSocket 连接
+// 注销 SSE 连接
 export function unregisterConnection(
   sessionId: string,
   role: 'dapp' | 'mobile'
@@ -195,6 +222,15 @@ export function unregisterConnection(
   }
 
   session.status = 'disconnected'
+
+  // 双方都断开后，缩短状态 TTL（IDLE_TIMEOUT = 1 小时）
+  // 到期后仅清除 walletInfo，session 证书（ID + secret）仍保留 1 年，用户无需重新扫码
+  if (!session.dapp && !session.mobile) {
+    const idleExpiry = Date.now() + IDLE_TIMEOUT
+    if (idleExpiry < session.stateExpiresAt) {
+      session.stateExpiresAt = idleExpiry
+    }
+  }
 }
 
 // Session ID 回收延迟（给客户端时间看到 410 状态）
@@ -208,11 +244,17 @@ export function terminateSession(sessionId: string): void {
   session.terminated = true
   session.status = 'disconnected'
 
-  // 关闭所有连接
-  session.dapp?.close(1008, 'Session terminated')
-  session.mobile?.close(1008, 'Session terminated')
-  session.dapp = null
-  session.mobile = null
+  // 通知并关闭所有 SSE 连接
+  if (session.dapp) {
+    sendSSE(session.dapp, { type: 'disconnect', reason: 'Session terminated' })
+    closeSSE(session.dapp)
+    session.dapp = null
+  }
+  if (session.mobile) {
+    sendSSE(session.mobile, { type: 'disconnect', reason: 'Session terminated' })
+    closeSSE(session.mobile)
+    session.mobile = null
+  }
 
   // 延迟删除 session 以回收 ID（4位ID空间有限）
   setTimeout(() => {
@@ -221,25 +263,58 @@ export function terminateSession(sessionId: string): void {
   }, SESSION_RECYCLE_DELAY)
 }
 
-// 获取对端连接
+// 获取对端 SSE 控制器
 export function getPeer(
   sessionId: string,
   myRole: 'dapp' | 'mobile'
-): ServerWebSocket<WebSocketData> | null {
+): SSEController | null {
   const session = sessions.get(sessionId)
   if (!session) return null
   return myRole === 'dapp' ? session.mobile : session.dapp
 }
 
-// 清理过期 Session
+// 保存移动端钱包状态（首次连接时调用）
+export function setWalletInfo(sessionId: string, address: string, chainId: number): void {
+  const session = sessions.get(sessionId)
+  if (!session) return
+  session.walletInfo = { address, chainId }
+}
+
+// 更新已缓存的 chainId（chainChanged 事件时调用）
+export function updateWalletChain(sessionId: string, chainId: number): void {
+  const session = sessions.get(sessionId)
+  if (!session || !session.walletInfo) return
+  session.walletInfo.chainId = chainId
+}
+
+// 更新已缓存的 address（accountsChanged 事件时调用）
+export function updateWalletAddress(sessionId: string, address: string): void {
+  const session = sessions.get(sessionId)
+  if (!session || !session.walletInfo) return
+  session.walletInfo.address = address
+}
+
+// 清理过期 Session（两级清理）
 export function cleanupExpiredSessions(): void {
   const now = Date.now()
   for (const [id, session] of sessions) {
     if (now > session.expiresAt) {
-      // 关闭连接
-      session.dapp?.close(1000, 'Session expired')
-      session.mobile?.close(1000, 'Session expired')
+      // 证书过期（1 年）→ 完全删除 session，释放 ID
+      if (session.dapp) {
+        sendSSE(session.dapp, { type: 'disconnect', reason: 'Session expired' })
+        closeSSE(session.dapp)
+      }
+      if (session.mobile) {
+        sendSSE(session.mobile, { type: 'disconnect', reason: 'Session expired' })
+        closeSSE(session.mobile)
+      }
       sessions.delete(id)
+    } else if (now > session.stateExpiresAt && session.walletInfo) {
+      // 状态过期（1 小时闲置）→ 仅清除 walletInfo，保留证书
+      // 用户下次打开时可直接用同一扫码 URL 重新连接，无需重新扫码
+      session.walletInfo = undefined
+      session.mobileLocked = false
+      console.log(`[Session] Cleared stale wallet state for session ${id}`)
     }
   }
 }

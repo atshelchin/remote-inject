@@ -129,7 +129,7 @@ provider.on('disconnect', (info: any) => {
     return
   }
 
-  // Transient disconnect (WebSocket drop) — DON'T send disconnect event to DApps.
+  // Transient disconnect (SSE drop) — DON'T send disconnect event to DApps.
   // Sending disconnect would clear accounts in injected.ts, causing DApps to restart
   // auth flows and trigger /nonce 409 errors. Instead, just update status to
   // 'reconnecting' which preserves cached accounts for DApps.
@@ -281,7 +281,7 @@ async function handleResume(serverUrl: string, sessionId: string, sessionUrl: st
 async function handleRequest(requestId: string, method: string, params?: unknown) {
   console.log(`[offscreen] request: ${method}`, { connected: provider.isConnected, userDisconnected, lastSessionId: !!lastSessionId, reconnecting: !!reconnectPromise })
 
-  // Try to reconnect on-demand if WebSocket is down
+  // Try to reconnect on-demand if SSE connection is down
   if (!provider.isConnected) {
     const reconnected = await ensureConnected()
     if (!reconnected) {

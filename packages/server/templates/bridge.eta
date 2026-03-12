@@ -286,22 +286,31 @@
       }
     }
 
-    let ws = null
+    let eventSource = null
     let currentAddress = null
     let currentChainId = null
     let pendingRequestCount = 0
     let selectedProvider = null
     let providerName = null
     let userInitiatedDisconnect = false
-    let reconnectAttempts = 0
-    const maxReconnectAttempts = 5
-    const reconnectDelay = 1000
+    let connectSent = false  // 只在首次 ready 时发送 connect，SSE 重连时服务端自动从缓存推送
+
+    // 通过 HTTP POST 向 DApp 发送消息（替代 WebSocket ws.send）
+    function postMessage(data) {
+      return fetch(`/message?session=${SESSION_ID}&role=mobile&k=${SECRET}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      }).catch(e => console.error('[Bridge] postMessage failed:', e))
+    }
 
     // EIP-6963 wallet discovery
     const eip6963Providers = []
 
     window.addEventListener('eip6963:announceProvider', (event) => {
       const { info, provider } = event.detail
+      // Skip our own extension provider — it must not act as the bridge wallet
+      if (info.rdns === 'com.remote-inject.bridge') return
       if (!eip6963Providers.find(p => p.info.uuid === info.uuid)) {
         eip6963Providers.push({ info, provider })
         console.log('[Bridge] EIP-6963 discovered wallet:', info.name)
@@ -451,14 +460,14 @@
         }
 
         const ethereum = window.ethereum
-        if (ethereum) {
+        if (ethereum && !ethereum.isRemoteInject) {
           if (ethereum.providers && Array.isArray(ethereum.providers) && ethereum.providers.length > 0) {
-            const idx = walletSelection?.index ?? 0
-            if (idx >= 0 && idx < ethereum.providers.length) {
-              const provider = ethereum.providers[idx]
+            const validProviders = ethereum.providers.filter(p => !p.isRemoteInject)
+            if (validProviders.length > 0) {
+              const idx = walletSelection?.index ?? 0
+              const provider = validProviders[idx] || validProviders[0]
               return { provider, name: getWalletName(provider) }
             }
-            return { provider: ethereum.providers[0], name: getWalletName(ethereum.providers[0]) }
           }
           return { provider: ethereum, name: getWalletName(ethereum) }
         }
@@ -518,20 +527,20 @@
 
     // Disconnect
     function disconnect() {
-      userInitiatedDisconnect = true  // Mark as user-initiated
-      if (ws) {
-        try {
-          ws.send(JSON.stringify({ type: 'disconnect', reason: 'User initiated' }))
-        } catch (e) {}
-        ws.close()
-      }
+      userInitiatedDisconnect = true
+      connectSent = false
+      postMessage({ type: 'disconnect', reason: 'User initiated' }).finally(() => {
+        if (eventSource) {
+          eventSource.close()
+          eventSource = null
+        }
+      })
       showError(t('bridge.disconnected'), t('bridge.userDisconnected'))
     }
 
     // Initialize
     async function init() {
       userInitiatedDisconnect = false
-      reconnectAttempts = 0
 
       if (!SESSION_ID || !SECRET) {
         showError(t('bridge.invalidLink'), t('bridge.sessionExpired'))
@@ -580,16 +589,16 @@
 
         updateStatus('loading', t('bridge.connectingApp'), t('bridge.almostDone'))
 
-        connectWebSocket()
+        await connectSSE()
 
         // Safe Apps Provider may not support event listeners in the same way
         if (selectedProvider.on) {
           selectedProvider.on('chainChanged', (chainId) => {
             currentChainId = parseInt(chainId, 16)
             document.getElementById('walletNetwork').textContent = getChainName(currentChainId)
-
-            if (ws && ws.readyState === WebSocket.OPEN) {
-              ws.send(JSON.stringify({ type: 'chainChanged', chainId: currentChainId }))
+            // 只在初始 connect 已发送后才转发变更（避免初始化时 MetaMask 发出的噪声事件）
+            if (connectSent) {
+              postMessage({ type: 'chainChanged', chainId: currentChainId })
             }
           })
 
@@ -600,9 +609,9 @@
             }
             currentAddress = accounts[0]
             document.getElementById('walletAddress').textContent = formatAddress(currentAddress)
-
-            if (ws && ws.readyState === WebSocket.OPEN) {
-              ws.send(JSON.stringify({ type: 'accountsChanged', accounts }))
+            // 只在初始 connect 已发送后才转发变更
+            if (connectSent) {
+              postMessage({ type: 'accountsChanged', accounts })
             }
           })
         }
@@ -612,64 +621,46 @@
       }
     }
 
-    // Connect WebSocket
-    async function connectWebSocket() {
-      // Check if session still exists (with retry for network errors)
-      let sessionValid = false
-      let sessionCheckFailed = false
-
-      for (let checkAttempt = 0; checkAttempt < 3; checkAttempt++) {
-        try {
-          const checkRes = await fetch(`/session/${SESSION_ID}`)
-          if (checkRes.ok) {
-            sessionValid = true
-            break
-          } else if (checkRes.status === 404 || checkRes.status === 410) {
-            // 404: Session doesn't exist, 410: Session terminated - no point retrying
-            sessionCheckFailed = true
-            console.log(`[Bridge] Session unavailable (${checkRes.status})`)
-            break
-          }
-          // Other HTTP errors - retry
-          console.log(`[Bridge] Session check failed with status ${checkRes.status}, retrying...`)
-        } catch (e) {
-          // Network error - retry
-          console.log(`[Bridge] Session check network error (attempt ${checkAttempt + 1}/3):`, e.message)
+    // 连接 SSE（服务端推送）+ 用 HTTP POST 发送消息
+    async function connectSSE() {
+      // 先检查 session 是否有效
+      try {
+        const res = await fetch(`/session/${SESSION_ID}`)
+        if (res.status === 404 || res.status === 410) {
+          showError(t('bridge.error'), t('bridge.sessionExpired'))
+          return
         }
-        if (checkAttempt < 2) {
-          await new Promise(r => setTimeout(r, 500 * (checkAttempt + 1)))
-        }
+      } catch (e) {
+        // 网络错误时继续尝试建立 SSE，由 EventSource 处理重连
+        console.log('[Bridge] Session check failed, opening SSE anyway:', e.message)
       }
 
-      // Show error if session is not available (404 or 410)
-      // For network errors, let WebSocket connection attempt handle it
-      if (sessionCheckFailed) {
-        showError(t('bridge.error'), t('bridge.sessionExpired'))
-        return
+      if (eventSource) {
+        eventSource.close()
+        eventSource = null
       }
 
-      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-      const wsUrl = `${protocol}//${window.location.host}/ws?session=${SESSION_ID}&role=mobile&k=${SECRET}`
+      const sseUrl = `/sse?session=${SESSION_ID}&role=mobile&k=${SECRET}`
+      eventSource = new EventSource(sseUrl)
 
-      ws = new WebSocket(wsUrl)
-
-      ws.onopen = () => {
-        reconnectAttempts = 0  // Reset on successful connection
-        console.log('[Bridge] WebSocket connected')
-      }
-
-      ws.onmessage = async (event) => {
+      eventSource.onmessage = async (event) => {
         try {
           const message = JSON.parse(event.data)
 
           switch (message.type) {
             case 'ready':
-              ws.send(JSON.stringify({
-                type: 'connect',
-                address: currentAddress,
-                chainId: currentChainId,
-              }))
-
+              // SSE 已就绪：首次发送 connect；SSE 重连时服务端会从缓存自动推送，无需重发
+              if (!connectSent) {
+                console.log('[Bridge] SSE connected, sending connect')
+                postMessage({
+                  type: 'connect',
+                  address: currentAddress,
+                  chainId: currentChainId,
+                })
+                connectSent = true
+              } else {
+                console.log('[Bridge] SSE reconnected, server will restore DApp state from cache')
+              }
               updateStatus('connected', t('bridge.connected'), t('bridge.waitingRequest'))
               document.getElementById('walletInfo').classList.remove('hidden')
               document.getElementById('disconnectBtn').classList.remove('hidden')
@@ -681,28 +672,17 @@
 
             case 'disconnect':
               if (message.reason === 'User initiated') {
-                // DApp user explicitly clicked Disconnect — permanent
+                // DApp 用户主动断开 — 永久性断开
                 userInitiatedDisconnect = true
                 showError(t('bridge.disconnected'), t('bridge.peerDisconnected'))
               } else {
-                // DApp's WebSocket dropped — stay connected, wait for DApp to reconnect
+                // DApp 的 SSE 断了 — 等待 DApp 重连（服务端有缓存，会自动推送 connect）
                 console.log('[Bridge] DApp connection dropped, waiting for reconnection...')
                 updateStatus('loading', t('bridge.peerReconnecting'), '')
               }
               break
 
-            case 'dapp_reconnected':
-              // DApp reconnected (e.g., page refresh), resend current state
-              console.log('[Bridge] DApp reconnected, resending connect message')
-              ws.send(JSON.stringify({
-                type: 'connect',
-                address: currentAddress,
-                chainId: currentChainId,
-              }))
-              break
-
             case 'accountSwitch':
-              // DApp switched to a different account for operations
               if (message.address) {
                 console.log('[Bridge] DApp switched account to:', message.address)
                 document.getElementById('walletAddress').textContent = formatAddress(message.address)
@@ -714,48 +694,18 @@
         }
       }
 
-      ws.onclose = (event) => {
+      eventSource.onerror = () => {
+        if (userInitiatedDisconnect) return
         if (document.getElementById('mainView').classList.contains('hidden')) return
 
-        // Don't reconnect if user or peer initiated disconnect
-        if (userInitiatedDisconnect) {
-          showError(t('bridge.disconnected'), t('bridge.reconnect'))
-          return
-        }
-
-        // 1008 means session rejected/terminated - don't retry
-        if (event.code === 1008) {
-          console.log('[Bridge] Session rejected (1008), not retrying')
+        if (eventSource.readyState === EventSource.CLOSED) {
+          // 永久关闭（session 过期或服务端拒绝）
+          console.log('[Bridge] SSE permanently closed')
           showError(t('bridge.error'), t('bridge.sessionExpired'))
-          return
-        }
-
-        // Try to reconnect for network issues (only for non-fatal errors)
-        if (reconnectAttempts < maxReconnectAttempts) {
-          reconnectAttempts++
-          const delay = reconnectDelay * Math.pow(1.5, reconnectAttempts - 1)
-          console.log(`[Bridge] Connection lost, reconnecting in ${delay}ms (attempt ${reconnectAttempts}/${maxReconnectAttempts})`)
-
-          updateStatus('loading',
-            t('bridge.reconnecting', { attempt: reconnectAttempts, maxAttempts: maxReconnectAttempts }),
-            t('bridge.networkDisconnected')
-          )
-
-          setTimeout(() => {
-            if (!userInitiatedDisconnect) {
-              connectWebSocket()
-            }
-          }, delay)
         } else {
-          // Max reconnects reached
-          showError(t('bridge.disconnected'), t('bridge.reconnect'))
-        }
-      }
-
-      ws.onerror = () => {
-        // Only show error if not reconnecting
-        if (reconnectAttempts >= maxReconnectAttempts) {
-          showError(t('bridge.error'), t('bridge.connectionFailed'))
+          // CONNECTING — EventSource 正在自动重连
+          console.log('[Bridge] SSE disconnected, auto-reconnecting...')
+          updateStatus('loading', t('bridge.reconnecting', { attempt: '', maxAttempts: '' }), t('bridge.networkDisconnected'))
         }
       }
     }
@@ -867,14 +817,14 @@
         } else {
           console.log('[Bridge]', method, '→', result)
         }
-        ws.send(JSON.stringify({ type: 'response', id, result }))
+        postMessage({ type: 'response', id, result })
       } catch (error) {
         console.warn('[Bridge]', method, '→ error:', error.code, error.message)
-        ws.send(JSON.stringify({
+        postMessage({
           type: 'response',
           id,
           error: { code: error.code || -32603, message: error.message || 'Unknown error' },
-        }))
+        })
       }
 
       if (needsConfirmation) {
@@ -887,20 +837,18 @@
 
     // Reconnect when phone wakes up (screen unlock) or network comes back
     document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'visible' && !userInitiatedDisconnect && ws) {
-        if (ws.readyState !== WebSocket.OPEN) {
+      if (document.visibilityState === 'visible' && !userInitiatedDisconnect && eventSource) {
+        if (eventSource.readyState === EventSource.CLOSED) {
           console.log('[Bridge] Page visible again, reconnecting...')
-          reconnectAttempts = 0  // Fresh start
-          connectWebSocket()
+          connectSSE()
         }
       }
     })
 
     window.addEventListener('online', () => {
-      if (!userInitiatedDisconnect && ws && ws.readyState !== WebSocket.OPEN) {
+      if (!userInitiatedDisconnect && eventSource && eventSource.readyState === EventSource.CLOSED) {
         console.log('[Bridge] Network back online, reconnecting...')
-        reconnectAttempts = 0
-        connectWebSocket()
+        connectSSE()
       }
     })
 

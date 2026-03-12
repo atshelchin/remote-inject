@@ -46,7 +46,7 @@ interface PendingRequest {
 const REQUEST_TIMEOUT = 60000 // 60 秒
 
 export class RemoteProvider {
-  private ws: WebSocket | null = null
+  private eventSource: EventSource | null = null
   private serverUrl: string = ''
   private sessionId: string = ''
   private sessionUrl: string = ''
@@ -58,35 +58,31 @@ export class RemoteProvider {
   private _accounts: string[] = []
   private _connected: boolean = false
 
-  // 重连相关
   private _userInitiatedDisconnect: boolean = false
-  private _reconnectAttempts: number = 0
-  private _maxReconnectAttempts: number = 5
-  private _reconnectDelay: number = 1000
-  private _reconnectTimer: ReturnType<typeof setTimeout> | null = null
 
-  // 暴露给外部检查重连状态
+  // 是否正在重连（EventSource 处于 CONNECTING 状态且有 session）
   get _reconnecting(): boolean {
-    return this._reconnectAttempts > 0 && this._reconnectAttempts < this._maxReconnectAttempts
+    return (
+      !this._userInitiatedDisconnect &&
+      this.eventSource !== null &&
+      this.eventSource.readyState === EventSource.CONNECTING &&
+      Boolean(this.sessionId)
+    )
   }
 
   constructor() {
-    // 初始化事件监听器容器
     const events: EventType[] = ['connect', 'disconnect', 'chainChanged', 'accountsChanged', 'message', 'reconnecting']
     events.forEach(event => this.eventListeners.set(event, new Set()))
   }
 
   /**
    * 连接到 Remote Inject Server
-   * @param serverUrl - 服务器地址
-   * @param metadata - DApp 元数据（可选），会显示在移动钱包的确认页面上
    */
   async connect(serverUrl: string, metadata?: DAppMetadata): Promise<{ sessionId: string; url: string }> {
     this.serverUrl = serverUrl.replace(/\/$/, '')
     this._userInitiatedDisconnect = false
-    this._reconnectAttempts = 0
 
-    // 创建 Session（传递 DApp 元数据）
+    // 创建 Session
     const response = await fetch(`${this.serverUrl}/session`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -101,8 +97,8 @@ export class RemoteProvider {
     this.sessionId = data.id
     this.sessionUrl = data.url
 
-    // 连接 WebSocket
-    await this.connectWebSocket()
+    // 建立 SSE 连接
+    await this.connectSSE()
 
     return {
       sessionId: this.sessionId,
@@ -112,131 +108,98 @@ export class RemoteProvider {
 
   /**
    * 恢复已存在的 Session
-   * @param sessionData - 之前保存的session数据
    */
   async resumeSession(sessionData: { serverUrl: string; sessionId: string; sessionUrl: string }): Promise<void> {
-    // Clean up any existing connection to prevent old onclose handlers
-    // from interfering with the new WebSocket
     this.cleanupConnection()
 
     this.serverUrl = sessionData.serverUrl.replace(/\/$/, '')
     this.sessionId = sessionData.sessionId
     this.sessionUrl = sessionData.sessionUrl
     this._userInitiatedDisconnect = false
-    this._reconnectAttempts = 0
 
-    // 先检查session是否还存在
+    // 检查 session 是否还存在
     const checkRes = await fetch(`${this.serverUrl}/session/${this.sessionId}`)
     if (!checkRes.ok) {
       throw new Error('Session not found or expired')
     }
 
-    // 连接 WebSocket
-    await this.connectWebSocket()
+    await this.connectSSE()
   }
 
   /**
-   * Clean up existing WebSocket and reconnect timer without triggering events
+   * 清理现有 SSE 连接（不触发事件）
    */
   private cleanupConnection(): void {
-    if (this._reconnectTimer) {
-      clearTimeout(this._reconnectTimer)
-      this._reconnectTimer = null
+    if (this.eventSource) {
+      this.eventSource.onmessage = null
+      this.eventSource.onerror = null
+      this.eventSource.onopen = null
+      this.eventSource.close()
+      this.eventSource = null
     }
-    if (this.ws) {
-      // Remove handlers to prevent old onclose from starting a reconnect loop
-      this.ws.onclose = null
-      this.ws.onmessage = null
-      this.ws.onerror = null
-      this.ws.onopen = null
-      if (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING) {
-        this.ws.close()
-      }
-      this.ws = null
+    // 清理所有 pending 请求的 timeout
+    for (const pending of this.pendingRequests.values()) {
+      clearTimeout(pending.timeout)
     }
+    this.pendingRequests.clear()
   }
 
   /**
-   * 连接 WebSocket
+   * 建立 SSE 连接，等待 ready 事件后 resolve
    */
-  private connectWebSocket(): Promise<void> {
+  private connectSSE(): Promise<void> {
     return new Promise((resolve, reject) => {
-      const wsUrl = this.serverUrl.replace(/^http/, 'ws')
-      this.ws = new WebSocket(`${wsUrl}/ws?session=${this.sessionId}&role=dapp`)
+      const sseUrl = `${this.serverUrl}/sse?session=${this.sessionId}&role=dapp`
+      const es = new EventSource(sseUrl)
+      this.eventSource = es
+
+      let resolved = false
 
       const timeout = setTimeout(() => {
-        reject(new Error('WebSocket connection timeout'))
-        this.ws?.close()
+        if (!resolved) {
+          es.close()
+          this.eventSource = null
+          reject(new Error('SSE connection timeout'))
+        }
       }, 10000)
 
-      this.ws.onopen = () => {
-        clearTimeout(timeout)
-        this._reconnectAttempts = 0  // 连接成功，重置重连计数
-        console.log('[RemoteProvider] WebSocket connected')
-      }
-
-      this.ws.onmessage = (event) => {
+      es.onmessage = (event) => {
         this.handleMessage(event.data)
-        // ready 消息后 resolve
-        try {
-          const msg = JSON.parse(event.data)
-          if (msg.type === 'ready') {
-            resolve()
-          }
-        } catch {}
-      }
-
-      this.ws.onclose = (event) => {
-        // 清除超时定时器（如果还在初始连接阶段）
-        clearTimeout(timeout)
-
-        // 用户主动断开，不重连
-        if (this._userInitiatedDisconnect) {
-          this._connected = false
-          this.emit('disconnect', { code: 4900, message: 'User disconnected', userInitiated: true } as DisconnectInfo)
-          return
-        }
-
-        // Session被拒绝（1008）或其他致命错误，不重连
-        if (event.code === 1008) {
-          this._connected = false
-          this.emit('disconnect', { code: event.code, message: 'Session rejected', userInitiated: false } as DisconnectInfo)
-          return
-        }
-
-        // 尝试重连
-        if (this._reconnectAttempts < this._maxReconnectAttempts) {
-          this._reconnectAttempts++
-          const delay = this._reconnectDelay * Math.pow(1.5, this._reconnectAttempts - 1)
-
-          console.log(`[RemoteProvider] Connection lost, reconnecting in ${delay}ms (attempt ${this._reconnectAttempts}/${this._maxReconnectAttempts})`)
-
-          this.emit('reconnecting', { attempt: this._reconnectAttempts, maxAttempts: this._maxReconnectAttempts } as ReconnectInfo)
-
-          this._reconnectTimer = setTimeout(() => {
-            if (!this._userInitiatedDisconnect) {
-              this.connectWebSocket().catch(err => {
-                console.error('[RemoteProvider] Reconnection failed:', err)
-                // 重连失败会触发onclose，进入下一次重连尝试
-              })
+        if (!resolved) {
+          try {
+            const msg = JSON.parse(event.data)
+            if (msg.type === 'ready') {
+              clearTimeout(timeout)
+              resolved = true
+              resolve()
             }
-          }, delay)
-        } else {
-          // 达到最大重连次数
-          this._connected = false
-          this.emit('disconnect', { code: 4900, message: 'Connection lost after max reconnect attempts', userInitiated: false } as DisconnectInfo)
+          } catch {}
         }
       }
 
-      this.ws.onerror = (error) => {
-        console.error('[RemoteProvider] WebSocket error:', error)
-        // onerror后会触发onclose，在那里处理重连
+      es.onerror = () => {
+        if (!resolved) {
+          // 初始连接阶段出错 — 等待超时处理，不急于 reject
+          // （EventSource 会自动重试，timeout 兜底）
+          return
+        }
+
+        if (this._userInitiatedDisconnect) return
+
+        if (es.readyState === EventSource.CLOSED) {
+          // 永久关闭（服务端拒绝或 session 不存在）
+          this._connected = false
+          this.emit('disconnect', { code: 4900, message: 'Connection closed', userInitiated: false } as DisconnectInfo)
+        } else if (es.readyState === EventSource.CONNECTING) {
+          // 短暂断开，EventSource 自动重连中
+          this.emit('reconnecting', { attempt: -1, maxAttempts: -1 } as ReconnectInfo)
+        }
       }
     })
   }
 
   /**
-   * 处理 WebSocket 消息
+   * 处理 SSE 消息
    */
   private handleMessage(data: string): void {
     try {
@@ -258,8 +221,6 @@ export class RemoteProvider {
         case 'disconnect':
           this._connected = false
           // 不清除 accounts/chainId — session 仍然有效，peer 可能重连
-          // 保留缓存状态让 DApp 继续显示已连接信息
-          // peer断开，标记为非用户主动，允许后续重连
           this.emit('disconnect', { code: 4900, message: message.reason || 'Peer disconnected', userInitiated: false } as DisconnectInfo)
           break
 
@@ -342,22 +303,12 @@ export class RemoteProvider {
           this.on('accountsChanged', handler)
         })
 
-      case 'wallet_switchEthereumChain':
-      case 'wallet_addEthereumChain':
-      case 'personal_sign':
-      case 'eth_signTypedData_v4':
-      case 'eth_sendTransaction':
-      case 'eth_sign':
-        // 这些方法需要转发到移动端
-        break
-
       default:
-        // 其他方法也转发
         break
     }
 
     // 检查连接状态
-    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+    if (!this.eventSource || this.eventSource.readyState !== EventSource.OPEN) {
       throw this.createError(-32000, 'Not connected')
     }
 
@@ -365,17 +316,16 @@ export class RemoteProvider {
       throw this.createError(-32000, 'Mobile wallet not connected')
     }
 
-    // 发送请求
     return this.sendRequest(method, params)
   }
 
   /**
-   * 发送 RPC 请求到移动端
+   * 通过 HTTP POST 发送 RPC 请求到移动端，响应通过 SSE 接收
    */
   private sendRequest(method: string, params?: unknown[] | object): Promise<unknown> {
-    return new Promise((resolve, reject) => {
-      const id = ++this.requestId
+    const id = ++this.requestId
 
+    return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
         this.pendingRequests.delete(id)
         reject(this.createError(-32003, 'Request timeout'))
@@ -383,12 +333,31 @@ export class RemoteProvider {
 
       this.pendingRequests.set(id, { resolve, reject, timeout })
 
-      this.ws!.send(JSON.stringify({
-        type: 'request',
-        id,
-        method,
-        params: params || [],
-      }))
+      fetch(`${this.serverUrl}/message?session=${this.sessionId}&role=dapp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'request', id, method, params: params || [] }),
+      }).then(resp => {
+        if (!resp.ok) {
+          const pending = this.pendingRequests.get(id)
+          if (pending) {
+            clearTimeout(pending.timeout)
+            this.pendingRequests.delete(id)
+            resp.json().then((err: any) => {
+              pending.reject(this.createError(err.code || -32000, err.message || 'Request failed'))
+            }).catch(() => {
+              pending.reject(this.createError(-32000, `Request failed: ${resp.status}`))
+            })
+          }
+        }
+      }).catch(err => {
+        const pending = this.pendingRequests.get(id)
+        if (pending) {
+          clearTimeout(pending.timeout)
+          this.pendingRequests.delete(id)
+          pending.reject(this.createError(-32003, 'Network error: ' + err.message))
+        }
+      })
     })
   }
 
@@ -434,24 +403,33 @@ export class RemoteProvider {
   disconnect(): void {
     this._userInitiatedDisconnect = true
 
-    // 清除重连定时器
-    if (this._reconnectTimer) {
-      clearTimeout(this._reconnectTimer)
-      this._reconnectTimer = null
+    // 通知服务端（fire-and-forget）
+    if (this.sessionId && this.serverUrl) {
+      fetch(`${this.serverUrl}/message?session=${this.sessionId}&role=dapp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'disconnect', reason: 'User initiated' }),
+      }).catch(() => {})
     }
 
-    if (this.ws) {
-      try {
-        this.ws.send(JSON.stringify({ type: 'disconnect', reason: 'User initiated' }))
-      } catch (e) {
-        // WebSocket可能已关闭
-      }
-      this.ws.close()
-      this.ws = null
+    // 关闭 SSE 连接
+    if (this.eventSource) {
+      this.eventSource.close()
+      this.eventSource = null
     }
+
     this._connected = false
     this._accounts = []
-    this._reconnectAttempts = 0
+
+    // 拒绝所有 pending 请求
+    for (const pending of this.pendingRequests.values()) {
+      clearTimeout(pending.timeout)
+      pending.reject(this.createError(4900, 'Disconnected'))
+    }
+    this.pendingRequests.clear()
+
+    // 主动断开：同步触发 disconnect 事件
+    this.emit('disconnect', { code: 4900, message: 'User disconnected', userInitiated: true } as DisconnectInfo)
   }
 
   /**
@@ -477,7 +455,7 @@ export class RemoteProvider {
   }
 
   /**
-   * 获取用于持久化的session数据
+   * 获取用于持久化的 session 数据
    */
   getSessionData(): { serverUrl: string; sessionId: string; sessionUrl: string } {
     return {
