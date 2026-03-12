@@ -62,7 +62,7 @@ function getSafeManifest(request: Request) {
   const manifest = {
     name: 'Remote Inject',
     description: 'Connect to DApps using your mobile wallet. Open-source WalletConnect alternative.',
-    iconPath: `${baseUrl}/logo.svg`,  // Absolute URL for cross-origin access
+    iconPath: `${baseUrl}/logo.png`,  // Absolute URL for cross-origin access
   }
 
   return new Response(JSON.stringify(manifest), {
@@ -109,13 +109,12 @@ const app = new Elysia()
   .get('/landing/manifest.json', ({ request }) => getSafeManifest(request))
 
   // Logo with CORS headers for Safe App icon
-  .get('/logo.svg', async () => {
-    const logoPath = import.meta.dir + '/../public/logo.svg'
+  .get('/logo.png', async () => {
+    const logoPath = import.meta.dir + '/../public/logo.png'
     const file = Bun.file(logoPath)
-    const content = await file.text()
-    return new Response(content, {
+    return new Response(file, {
       headers: {
-        'Content-Type': 'image/svg+xml',
+        'Content-Type': 'image/png',
         'Access-Control-Allow-Origin': '*',
         'Cache-Control': 'public, max-age=86400',
       },

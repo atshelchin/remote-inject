@@ -7,6 +7,8 @@
   import ConnectedView from '../../components/ConnectedView.svelte'
   import RequestLog from '../../components/RequestLog.svelte'
 
+  let { sidepanel = false }: { sidepanel?: boolean } = $props()
+
   let state = $state<ExtensionState>({
     serverUrl: DEFAULT_SERVER_URL,
     status: 'disconnected',
@@ -35,13 +37,8 @@
       if (changes.extensionState?.newValue) {
         const newState = changes.extensionState.newValue
         state = newState
-        if (newState.error) {
-          error = newState.error
-        }
-        // Clear reconnect pending when status changes from reconnecting
-        if (newState.status !== 'reconnecting') {
-          reconnectPending = false
-        }
+        if (newState.error) error = newState.error
+        if (newState.status !== 'reconnecting') reconnectPending = false
       }
     })
   })
@@ -59,7 +56,6 @@
     if (reconnectPending) return
     reconnectPending = true
     chrome.runtime.sendMessage({ type: 'popup_reconnect' })
-    // Auto-reset after timeout in case state_update never arrives
     setTimeout(() => { reconnectPending = false }, 10000)
   }
 
@@ -67,98 +63,148 @@
     debugMode = !debugMode
     chrome.storage.local.set({ debugMode })
   }
+
+  async function openSidepanel() {
+    const [tab] = await new Promise<chrome.tabs.Tab[]>((resolve) =>
+      chrome.tabs.query({ active: true, currentWindow: true }, resolve)
+    )
+    if (tab?.windowId != null) {
+      await chrome.sidePanel.open({ windowId: tab.windowId })
+      window.close()
+    }
+  }
+
+  let statusLabel = $derived(
+    state.status === 'connected' ? 'Connected'
+    : state.status === 'waiting' ? 'Waiting'
+    : state.status === 'connecting' ? 'Connecting'
+    : state.status === 'reconnecting' ? 'Reconnecting'
+    : 'Offline'
+  )
+
+  let showActivity = $derived(sidepanel || debugMode)
 </script>
 
-<main>
+<div class="app" class:sidepanel>
+  <!-- ── Header ── -->
   <header>
-    <img src="/assets/icon.svg" alt="logo" class="logo" />
-    <h1>Remote Inject</h1>
-    <button class="debug-toggle" class:active={debugMode} onclick={toggleDebug} title="Debug mode">
-      <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-        <path d="M8 14a4 4 0 0 0 4-4V8a4 4 0 0 0-8 0v2a4 4 0 0 0 4 4Z" stroke="currentColor" stroke-width="1.3" fill="none"/>
-        <path d="M5.5 8.5h5M5.5 11h5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
-        <path d="M8 4V2M5 5L3 3.5M11 5l2-1.5M4 8H1.5M12 8h2.5M4 12l-2 1.5M12 12l2 1.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
-      </svg>
-    </button>
-    <span class="badge" class:connected={state.status === 'connected'} class:waiting={state.status === 'waiting' || state.status === 'connecting'} class:reconnecting={state.status === 'reconnecting'}>
-      {state.status === 'connected' ? 'Connected' : state.status === 'waiting' ? 'Waiting' : state.status === 'connecting' ? 'Connecting' : state.status === 'reconnecting' ? 'Reconnecting' : 'Disconnected'}
-    </span>
+    <img src="/assets/icon.png" alt="" class="logo" />
+    <span class="brand">Remote Inject Bridge</span>
+    <div class="header-right">
+      {#if !sidepanel}
+        <button class="icon-btn" onclick={openSidepanel} title="Open in side panel">
+          <svg width="13" height="13" viewBox="0 0 14 14" fill="none">
+            <rect x="0.65" y="0.65" width="12.7" height="12.7" rx="2" stroke="currentColor" stroke-width="1.3"/>
+            <line x1="9" y1="0.65" x2="9" y2="13.35" stroke="currentColor" stroke-width="1.3"/>
+          </svg>
+        </button>
+      {/if}
+      <button class="icon-btn" class:active={debugMode} onclick={toggleDebug} title="Debug">
+        <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
+          <path d="M8 14a4 4 0 0 0 4-4V8a4 4 0 0 0-8 0v2a4 4 0 0 0 4 4Z" stroke="currentColor" stroke-width="1.3" fill="none"/>
+          <path d="M5.5 8.5h5M5.5 11h5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+          <path d="M8 4V2M5 5L3 3.5M11 5l2-1.5M4 8H1.5M12 8h2.5M4 12l-2 1.5M12 12l2 1.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+        </svg>
+      </button>
+      <span
+        class="status-chip"
+        class:connected={state.status === 'connected'}
+        class:pending={state.status === 'waiting' || state.status === 'connecting'}
+        class:warning={state.status === 'reconnecting'}
+      >{statusLabel}</span>
+    </div>
   </header>
 
+  <!-- ── Error ── -->
   {#if error}
-    <div class="error">{error}</div>
+    <div class="error-bar">
+      <span>{error}</span>
+      <button class="dismiss" onclick={() => (error = '')} aria-label="Dismiss">
+        <svg width="11" height="11" viewBox="0 0 12 12" fill="none">
+          <path d="M1 1l10 10M11 1L1 11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+      </button>
+    </div>
   {/if}
 
+  <!-- ── Disconnected ── -->
   {#if state.status === 'disconnected'}
-    <div class="guide">
-      <p class="guide-title">Bridge any DApp to your mobile wallet</p>
-      <ol>
-        <li>Enter your Remote Inject server URL below</li>
-        <li>Click Connect and scan the QR code with your mobile wallet</li>
-        <li>Open any DApp — it will detect "Remote Inject Bridge" as a wallet</li>
-      </ol>
+    <div class="setup-view">
+      <p class="setup-desc">Bridge any DApp to your mobile wallet via a relay server.</p>
+      <ServerConfig serverUrl={state.serverUrl} onConnect={connect} />
     </div>
-    <ServerConfig serverUrl={state.serverUrl} onConnect={connect} />
+
+  <!-- ── Connecting ── -->
   {:else if state.status === 'connecting'}
-    <div class="center">
-      <div class="spinner"></div>
-      <p class="hint">Connecting to server...</p>
+    <div class="center-view">
+      <span class="ring"></span>
+      <span class="state-text">Connecting…</span>
     </div>
+
+  <!-- ── Waiting for scan ── -->
   {:else if state.status === 'waiting'}
-    <div class="qr-section">
-      <p class="hint">Scan with your mobile wallet's DApp browser, or paste the link into it</p>
+    <div class="qr-view">
+      <p class="qr-hint">Open in your mobile wallet's DApp browser</p>
       {#if state.sessionUrl}
         <QRCode url={state.sessionUrl} />
       {/if}
       {#if state.sessionId}
-        <div class="session-bar">
-          <span class="session-bar-label">Session</span>
-          <span class="session-bar-id">{state.sessionId}</span>
-          <span class="session-bar-hint">verify with wallet</span>
+        <div class="session-strip">
+          <span class="strip-label">Session</span>
+          <span class="strip-code">{state.sessionId}</span>
+          <span class="strip-verify">verify</span>
         </div>
       {/if}
-      <button class="btn secondary" onclick={disconnect}>Cancel</button>
+      <button class="btn-outline" onclick={disconnect}>Cancel</button>
     </div>
+
+  <!-- ── Reconnecting ── -->
   {:else if state.status === 'reconnecting'}
-    {#if state.account}
-      <ConnectedView account={state.account} chainId={state.chainId ?? '0x1'} sessionId={state.sessionId} />
-    {/if}
-    <div class="reconnecting-banner">
-      <span class="banner-text">Connection lost</span>
-      <button class="reconnect-btn" onclick={reconnect} disabled={reconnectPending}>
-        {#if reconnectPending}
-          <div class="spinner small"></div>
-          Reconnecting...
-        {:else}
-          Reconnect
+    <div class="main-view">
+      {#if state.account}
+        <ConnectedView account={state.account} chainId={state.chainId ?? '0x1'} sessionId={state.sessionId} dim />
+      {/if}
+      <div class="alert-row">
+        <span class="alert-dot"></span>
+        <span class="alert-text">Connection lost</span>
+        <button class="retry-btn" onclick={reconnect} disabled={reconnectPending}>
+          {#if reconnectPending}
+            <span class="mini-ring"></span>
+          {:else}
+            Retry
+          {/if}
+        </button>
+      </div>
+      <p class="tip">Keep the bridge page open on your phone</p>
+      {#if showActivity}
+        {#if state.sessionUrl}
+          <div class="url-box">
+            <p class="url-label">Session URL — paste into wallet to reconnect</p>
+            <code class="url-val">{state.sessionUrl}</code>
+          </div>
         {/if}
-      </button>
+        <RequestLog requests={state.requests} />
+      {/if}
+      <button class="btn-disconnect" onclick={disconnect}>Disconnect</button>
     </div>
-    <p class="reconnect-hint">Please make sure the bridge page is open on your phone</p>
-    {#if debugMode}
-      {#if state.sessionUrl}
-        <div class="session-hint">
-          <p>You can also open this link in your mobile wallet to reconnect faster:</p>
-          <code class="session-url">{state.sessionUrl}</code>
-        </div>
-      {/if}
-      <RequestLog requests={state.requests} />
-    {/if}
-    <button class="btn danger" onclick={disconnect}>Disconnect</button>
+
+  <!-- ── Connected ── -->
   {:else if state.status === 'connected'}
-    <ConnectedView account={state.account ?? ''} chainId={state.chainId ?? '0x1'} sessionId={state.sessionId} />
-    {#if debugMode}
-      {#if state.sessionUrl}
-        <div class="session-hint">
-          <p>Wallet disconnected? Open the same link in your mobile wallet to reconnect:</p>
-          <code class="session-url">{state.sessionUrl}</code>
-        </div>
+    <div class="main-view">
+      <ConnectedView account={state.account ?? ''} chainId={state.chainId ?? '0x1'} sessionId={state.sessionId} />
+      {#if showActivity}
+        {#if state.sessionUrl}
+          <div class="url-box">
+            <p class="url-label">Session URL — paste into wallet to reconnect</p>
+            <code class="url-val">{state.sessionUrl}</code>
+          </div>
+        {/if}
+        <RequestLog requests={state.requests} />
       {/if}
-      <RequestLog requests={state.requests} />
-    {/if}
-    <button class="btn danger" onclick={disconnect}>Disconnect</button>
+      <button class="btn-disconnect" onclick={disconnect}>Disconnect</button>
+    </div>
   {/if}
-</main>
+</div>
 
 <style>
   :global(*) {
@@ -167,303 +213,368 @@
     box-sizing: border-box;
   }
 
-  :global(body) {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    background: #0f172a;
-    color: #e2e8f0;
-    width: 360px;
-    min-height: 400px;
+  :global(:root) {
+    --bg:         #0f0f11;
+    --s1:         #1b1b1f;
+    --s2:         #252529;
+    --ln:         rgba(255,255,255,0.07);
+    --ln2:        rgba(255,255,255,0.12);
+    --t1:         #edeef1;
+    --t2:         #8a8a94;
+    --t3:         #52525c;
+    --blue:       #4b8cff;
+    --blue-bg:    rgba(75,140,255,0.1);
+    --green:      #2dca78;
+    --green-bg:   rgba(45,202,120,0.1);
+    --amber:      #f5a130;
+    --amber-bg:   rgba(245,161,48,0.1);
+    --red:        #e04444;
+    --red-bg:     rgba(224,68,68,0.1);
+    --mono:       'SF Mono', 'Cascadia Code', Monaco, monospace;
+    --r:          9px;
   }
 
-  main {
-    padding: 16px;
+  :global(body) {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--t1);
+    -webkit-font-smoothing: antialiased;
+    line-height: 1.5;
+  }
+
+  :global(body.is-popup) {
+    width: 340px;
+  }
+
+  :global(body.is-sidepanel) {
+    min-height: 100vh;
+  }
+
+  /* ── App shell ── */
+  .app {
+    padding: 14px;
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: 12px;
   }
 
+  /* ── Header ── */
   header {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 7px;
   }
 
   .logo {
-    width: 28px;
-    height: 28px;
-    border-radius: 6px;
+    width: 20px;
+    height: 20px;
+    border-radius: 4px;
+    flex-shrink: 0;
   }
 
-  h1 {
-    font-size: 16px;
+  .brand {
+    font-size: 13px;
     font-weight: 600;
+    color: var(--t1);
     flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
-  .debug-toggle {
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    flex-shrink: 0;
+  }
+
+  .icon-btn {
     background: none;
-    border: 1px solid transparent;
-    border-radius: 6px;
-    color: #64748b;
+    border: none;
+    color: var(--t3);
     cursor: pointer;
     padding: 4px;
+    border-radius: 5px;
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: all 0.15s;
+    transition: color 0.12s, background 0.12s;
+    line-height: 1;
   }
 
-  .debug-toggle:hover {
-    color: #cbd5e1;
-    background: #1e293b;
-  }
+  .icon-btn:hover { color: var(--t2); background: var(--s1); }
+  .icon-btn.active { color: var(--blue); background: var(--blue-bg); }
 
-  .debug-toggle.active {
-    color: #3b82f6;
-    background: #1e3a5f;
-    border-color: #3b82f6;
-  }
-
-  .badge {
-    font-size: 11px;
-    padding: 3px 8px;
+  .status-chip {
+    font-size: 10px;
+    font-weight: 500;
+    padding: 2px 7px;
     border-radius: 99px;
-    background: #334155;
-    color: #94a3b8;
-    font-weight: 500;
+    background: var(--s1);
+    color: var(--t3);
+    margin-left: 2px;
   }
+  .status-chip.connected { background: var(--green-bg); color: var(--green); }
+  .status-chip.pending   { background: var(--blue-bg);  color: var(--blue);  }
+  .status-chip.warning   { background: var(--amber-bg); color: var(--amber); }
 
-  .badge.connected {
-    background: #064e3b;
-    color: #34d399;
-  }
-
-  .badge.waiting {
-    background: #78350f;
-    color: #fbbf24;
-  }
-
-  .badge.reconnecting {
-    background: #78350f;
-    color: #fb923c;
-  }
-
-  .error {
-    background: #7f1d1d;
-    color: #fca5a5;
-    padding: 8px 12px;
-    border-radius: 8px;
-    font-size: 13px;
-  }
-
-  .guide {
-    background: #1e293b;
-    border-radius: 10px;
-    padding: 14px;
-  }
-
-  .guide-title {
-    font-size: 14px;
-    font-weight: 500;
-    color: #e2e8f0;
-    margin-bottom: 10px;
-  }
-
-  .guide ol {
-    padding-left: 20px;
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-  }
-
-  .guide li {
-    font-size: 13px;
-    color: #94a3b8;
-    line-height: 1.4;
-  }
-
-  .center {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 12px;
-    padding: 32px 0;
-  }
-
-  .qr-section {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 12px;
-  }
-
-  .hint {
-    font-size: 13px;
-    color: #94a3b8;
-    text-align: center;
-  }
-
-  .session-hint {
-    background: #1e293b;
-    border-radius: 8px;
-    padding: 10px 12px;
-  }
-
-  .session-hint p {
-    font-size: 12px;
-    color: #64748b;
-    margin-bottom: 6px;
-  }
-
-  .session-url {
-    font-size: 11px;
-    color: #94a3b8;
-    word-break: break-all;
-    display: block;
-    background: #0f172a;
-    padding: 6px 8px;
-    border-radius: 4px;
-    user-select: all;
-  }
-
-  .reconnecting-banner {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    background: #1c1917;
-    border: 1px solid #78350f;
-    border-radius: 8px;
-    padding: 10px 14px;
-    font-size: 13px;
-    color: #fb923c;
-  }
-
-  .banner-text {
-    flex: 1;
-  }
-
-  .reconnect-btn {
-    background: #78350f;
-    border: none;
-    border-radius: 6px;
-    color: #fed7aa;
-    cursor: pointer;
-    padding: 5px 12px;
-    font-size: 12px;
-    font-weight: 500;
-    flex-shrink: 0;
-    transition: all 0.15s;
-  }
-
-  .reconnect-btn:hover:not(:disabled) {
-    background: #92400e;
-  }
-
-  .reconnect-btn:disabled {
-    opacity: 0.7;
-    cursor: not-allowed;
-  }
-
-  .reconnect-hint {
-    font-size: 12px;
-    color: #64748b;
-    text-align: center;
-  }
-
-  .spinner {
-    width: 32px;
-    height: 32px;
-    border: 3px solid #334155;
-    border-top-color: #3b82f6;
-    border-radius: 50%;
-    animation: spin 0.8s linear infinite;
-  }
-
-  .spinner.small {
-    width: 16px;
-    height: 16px;
-    border-width: 2px;
-    flex-shrink: 0;
-  }
-
-  @keyframes spin {
-    to { transform: rotate(360deg); }
-  }
-
-  :global(.btn) {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    padding: 10px 16px;
-    border: none;
-    border-radius: 8px;
-    font-size: 14px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: background 0.15s;
-    width: 100%;
-  }
-
-  :global(.btn.primary) {
-    background: #3b82f6;
-    color: #fff;
-  }
-
-  :global(.btn.primary:hover) {
-    background: #2563eb;
-  }
-
-  :global(.btn.secondary) {
-    background: #334155;
-    color: #e2e8f0;
-  }
-
-  :global(.btn.secondary:hover) {
-    background: #475569;
-  }
-
-  :global(.btn.danger) {
-    background: #7f1d1d;
-    color: #fca5a5;
-  }
-
-  :global(.btn.danger:hover) {
-    background: #991b1b;
-  }
-
-  .session-bar {
+  /* ── Error bar ── */
+  .error-bar {
     display: flex;
     align-items: center;
     gap: 8px;
-    width: 100%;
-    padding: 8px 12px;
-    background: #1e293b;
+    background: var(--red-bg);
+    border: 1px solid rgba(224,68,68,0.2);
     border-radius: 8px;
-    box-sizing: border-box;
+    padding: 8px 10px;
+    font-size: 12px;
+    color: var(--red);
+  }
+  .error-bar span { flex: 1; }
+
+  .dismiss {
+    background: none;
+    border: none;
+    color: var(--red);
+    cursor: pointer;
+    opacity: 0.6;
+    padding: 2px;
+    display: flex;
+    align-items: center;
+    transition: opacity 0.12s;
+    flex-shrink: 0;
+  }
+  .dismiss:hover { opacity: 1; }
+
+  /* ── Setup view ── */
+  .setup-view {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
   }
 
-  .session-bar-label {
+  .setup-desc {
+    font-size: 12px;
+    color: var(--t3);
+    line-height: 1.55;
+  }
+
+  /* ── Connecting ── */
+  .center-view {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+    padding: 38px 0;
+  }
+
+  .ring {
+    width: 26px;
+    height: 26px;
+    border: 2px solid var(--s2);
+    border-top-color: var(--blue);
+    border-radius: 50%;
+    animation: spin 0.65s linear infinite;
+    display: block;
+  }
+
+  .mini-ring {
+    width: 10px;
+    height: 10px;
+    border: 1.5px solid rgba(245,161,48,0.3);
+    border-top-color: var(--amber);
+    border-radius: 50%;
+    animation: spin 0.65s linear infinite;
+    display: inline-block;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .state-text {
+    font-size: 13px;
+    color: var(--t2);
+  }
+
+  /* ── QR view ── */
+  .qr-view {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .qr-hint {
+    font-size: 12px;
+    color: var(--t2);
+    text-align: center;
+    line-height: 1.5;
+  }
+
+  /* ── Session strip ── */
+  .session-strip {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    width: 100%;
+    padding: 8px 12px;
+    background: var(--s1);
+    border: 1px solid var(--ln);
+    border-radius: var(--r);
+  }
+
+  .strip-label {
     font-size: 10px;
-    color: #64748b;
+    color: var(--t3);
     text-transform: uppercase;
     letter-spacing: 0.5px;
     flex-shrink: 0;
   }
 
-  .session-bar-id {
-    font-size: 16px;
+  .strip-code {
+    font-size: 15px;
     font-weight: 700;
-    font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
-    color: #3b82f6;
+    font-family: var(--mono);
+    color: var(--blue);
     letter-spacing: 3px;
     flex: 1;
     text-align: center;
   }
 
-  .session-bar-hint {
+  .strip-verify {
     font-size: 9px;
-    color: #475569;
-    text-align: right;
+    color: var(--t3);
     flex-shrink: 0;
   }
+
+  /* ── Main view (connected / reconnecting) ── */
+  .main-view {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  /* ── Alert row (reconnecting) ── */
+  .alert-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: var(--amber-bg);
+    border: 1px solid rgba(245,161,48,0.18);
+    border-radius: 8px;
+  }
+
+  .alert-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--amber);
+    flex-shrink: 0;
+  }
+
+  .alert-text {
+    flex: 1;
+    font-size: 12px;
+    color: var(--amber);
+  }
+
+  .retry-btn {
+    background: none;
+    border: 1px solid rgba(245,161,48,0.3);
+    border-radius: 5px;
+    color: var(--amber);
+    font-size: 11px;
+    font-weight: 500;
+    cursor: pointer;
+    padding: 3px 9px;
+    flex-shrink: 0;
+    transition: background 0.12s;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    min-width: 48px;
+    justify-content: center;
+  }
+  .retry-btn:hover:not(:disabled) { background: rgba(245,161,48,0.12); }
+  .retry-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .tip {
+    font-size: 11px;
+    color: var(--t3);
+    text-align: center;
+  }
+
+  /* ── URL debug box ── */
+  .url-box {
+    background: var(--s1);
+    border: 1px solid var(--ln);
+    border-radius: 8px;
+    padding: 9px 11px;
+  }
+
+  .url-label {
+    font-size: 11px;
+    color: var(--t3);
+    margin-bottom: 5px;
+  }
+
+  .url-val {
+    font-size: 10px;
+    color: var(--t2);
+    font-family: var(--mono);
+    word-break: break-all;
+    display: block;
+    user-select: all;
+    line-height: 1.55;
+  }
+
+  /* ── Buttons ── */
+  .btn-outline {
+    width: 100%;
+    padding: 9px 0;
+    background: none;
+    border: 1px solid var(--ln);
+    border-radius: 8px;
+    color: var(--t2);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: border-color 0.12s, color 0.12s;
+  }
+  .btn-outline:hover { border-color: var(--ln2); color: var(--t1); }
+
+  .btn-disconnect {
+    width: 100%;
+    padding: 9px 0;
+    background: var(--s1);
+    border: 1px solid var(--ln);
+    border-radius: 8px;
+    color: var(--t2);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.12s;
+  }
+  .btn-disconnect:hover {
+    background: var(--red-bg);
+    border-color: rgba(224,68,68,0.2);
+    color: var(--red);
+  }
+
+  /* ── Shared global buttons (used by ServerConfig) ── */
+  :global(.btn-primary) {
+    width: 100%;
+    padding: 9px 0;
+    background: var(--blue);
+    border: none;
+    border-radius: 8px;
+    color: #fff;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.12s;
+  }
+  :global(.btn-primary:hover) { opacity: 0.86; }
+  :global(.btn-primary:active) { opacity: 0.75; }
 </style>

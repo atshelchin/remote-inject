@@ -6,10 +6,10 @@ export default defineConfig({
   manifest: {
     name: 'Remote Inject Bridge',
     description: 'Connect any DApp to your mobile wallet via Remote Inject',
-    permissions: ['storage', 'offscreen'],
+    permissions: ['storage', 'offscreen', 'sidePanel', 'tabs'],
     minimum_chrome_version: '116',
     icons: {
-      128: 'assets/icon.svg',
+      128: 'assets/icon.png',
     },
     web_accessible_resources: [
       {
