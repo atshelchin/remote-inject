@@ -308,7 +308,9 @@ export class RemoteProvider {
     }
 
     // 检查连接状态
-    if (!this.eventSource || this.eventSource.readyState !== EventSource.OPEN) {
+    // CLOSED = 永久断开（session 不存在/已终止），拒绝请求
+    // CONNECTING = EventSource 临时重连中，仍允许 POST（服务端会排队，SSE 恢复后投递响应）
+    if (!this.eventSource || this.eventSource.readyState === EventSource.CLOSED) {
       throw this.createError(-32000, 'Not connected')
     }
 
