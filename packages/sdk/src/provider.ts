@@ -119,8 +119,21 @@ export class RemoteProvider {
     this.sessionUrl = sessionData.sessionUrl
     this._userInitiatedDisconnect = false
 
-    // 检查 session 是否还存在
-    const checkRes = await fetch(`${this.serverUrl}/session/${this.sessionId}`)
+    // 从 sessionUrl 中提取 nonce 和 key（用于服务器重启后的无状态恢复）
+    let nonce = ''
+    let key = ''
+    try {
+      const url = new URL(this.sessionUrl)
+      nonce = url.searchParams.get('n') || ''
+      key = url.searchParams.get('k') || ''
+    } catch {}
+
+    // 检查 session 是否还存在（附带 nonce+key 允许服务端按需创建）
+    let checkUrl = `${this.serverUrl}/session/${this.sessionId}`
+    if (nonce && key) {
+      checkUrl += `?n=${encodeURIComponent(nonce)}&k=${encodeURIComponent(key)}`
+    }
+    const checkRes = await fetch(checkUrl)
     if (!checkRes.ok) {
       throw new Error('Session not found or expired')
     }

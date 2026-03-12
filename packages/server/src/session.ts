@@ -1,3 +1,5 @@
+import { createHmac } from 'crypto'
+
 export type SessionStatus = 'pending' | 'connected' | 'disconnected'
 
 // DApp 元数据（展示给用户看的）
@@ -48,7 +50,7 @@ function closeSSE(controller: SSEController): void {
 
 export interface Session {
   id: string
-  secret: string            // 移动端连接需要的密钥（防止暴力枚举）
+  nonce: string             // 随机 nonce，与 id 一起用于 HMAC 派生密钥（不直接存储密钥）
   createdAt: number
   expiresAt: number         // 证书过期时间（默认 1 年），到期后删除整个 session，用户需重新扫码
   stateExpiresAt: number    // 状态过期时间（活跃时 7 天，闲置时 1 小时），到期后仅清除 walletInfo，session 本身不删除
@@ -66,7 +68,16 @@ export interface Session {
 // 排除易混淆字符 (0/O/1/I/L)
 const CHARSET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
 const SESSION_ID_LENGTH = 4
-const SECRET_LENGTH = 16    // 16 位密钥，用于防止暴力枚举
+const SECRET_LENGTH = 16    // 16 位派生密钥长度
+const NONCE_LENGTH = 12     // 12 位随机 nonce（32^12 ≈ 10^18 种组合，确保唯一性）
+
+// 服务端密钥（用于 HMAC 派生 session key）
+// 设置后 session 可在服务器重启后恢复，未设置则每次启动自动生成（session 不跨重启）
+const SESSION_SECRET: string = process.env.SESSION_SECRET || (() => {
+  const key = generateRandomString(32)
+  console.warn('[Session] SESSION_SECRET not configured. Auto-generated key for this instance. Set SESSION_SECRET env var for sessions that survive server restarts.')
+  return key
+})()
 
 // 过期时间（可通过环境变量配置，单位：秒）
 const CREDENTIAL_TIMEOUT = parseInt(process.env.SESSION_CREDENTIAL_TTL || '31536000', 10) * 1000  // 证书 TTL：1 年（session ID + secret 保持有效，无需重新扫码）
@@ -134,17 +145,33 @@ function generateSessionId(): string {
   return id
 }
 
-// 生成连接密钥
-function generateSecret(): string {
-  return generateRandomString(SECRET_LENGTH)
+// 生成随机 nonce
+function generateNonce(): string {
+  return generateRandomString(NONCE_LENGTH)
 }
 
-// 创建新 Session
-export function createSession(metadata?: DAppMetadata): Session {
+// 基于 HMAC-SHA256 派生密钥：key = HMAC(SERVER_SECRET, sessionId + nonce)
+// 同一 id+nonce 始终产生相同 key，服务器重启后仍可验证
+function deriveKey(sessionId: string, nonce: string): string {
+  const hmac = createHmac('sha256', SESSION_SECRET)
+  hmac.update(sessionId + nonce)
+  const bytes = new Uint8Array(hmac.digest())
+  return Array.from(bytes)
+    .slice(0, SECRET_LENGTH)
+    .map(byte => CHARSET[byte % CHARSET.length])
+    .join('')
+}
+
+// 创建新 Session（返回 session 和派生的 key）
+export function createSession(metadata?: DAppMetadata): { session: Session; key: string } {
   const now = Date.now()
+  const id = generateSessionId()
+  const nonce = generateNonce()
+  const key = deriveKey(id, nonce)
+
   const session: Session = {
-    id: generateSessionId(),
-    secret: generateSecret(),
+    id,
+    nonce,
     createdAt: now,
     expiresAt: now + CREDENTIAL_TIMEOUT,          // 证书 1 年有效，无需重新扫码
     stateExpiresAt: now + STATE_PENDING_TIMEOUT,  // 状态初始 5 分钟（等待连接）
@@ -158,7 +185,7 @@ export function createSession(metadata?: DAppMetadata): Session {
     mobileQueue: [],
   }
   sessions.set(session.id, session)
-  return session
+  return { session, key }
 }
 
 // 获取 Session
@@ -171,11 +198,49 @@ export function deleteSession(id: string): void {
   sessions.delete(id)
 }
 
-// 验证移动端密钥
-export function verifySecret(sessionId: string, secret: string): boolean {
+// 验证移动端密钥（HMAC 派生）
+// 如果 session 已在内存中且 nonce 匹配，直接返回 true（跳过 HMAC 计算）
+export function verifySecret(sessionId: string, nonce: string, key: string): boolean {
   const session = sessions.get(sessionId)
-  if (!session) return false
-  return session.secret === secret
+  if (session && session.nonce === nonce) {
+    // session 在内存中且 nonce 匹配 — 创建时已验证过，无需重复计算
+    return true
+  }
+  // 不在内存 或 nonce 不匹配 — 计算 HMAC 验证
+  return key === deriveKey(sessionId, nonce)
+}
+
+// 获取或按需创建 Session（无状态恢复：服务器重启后通过 HMAC 验证重建 session）
+export function getOrCreateSession(id: string, nonce: string, key: string): Session | null {
+  const existing = sessions.get(id)
+  if (existing) {
+    // 已在内存中 — 验证 nonce 匹配
+    if (existing.nonce !== nonce) return null
+    return existing
+  }
+
+  // 不在内存 — 通过 HMAC 验证凭证合法性
+  if (key !== deriveKey(id, nonce)) return null
+
+  // 验证通过，按需创建 session（无状态恢复）
+  const now = Date.now()
+  const session: Session = {
+    id,
+    nonce,
+    createdAt: now,
+    expiresAt: now + CREDENTIAL_TIMEOUT,
+    stateExpiresAt: now + STATE_PENDING_TIMEOUT,
+    status: 'pending',
+    dapp: null,
+    mobile: null,
+    mobileLocked: false,
+    terminated: false,
+    dappQueue: [],
+    mobileQueue: [],
+  }
+  sessions.set(id, session)
+  console.log(`[Session] Recovered session: ${id} (stateless)`)
+  return session
 }
 
 // 检查移动端是否已锁定

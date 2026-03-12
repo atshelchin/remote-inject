@@ -223,6 +223,7 @@
   <script>
     // Server-injected data
     const SESSION_ID = '<%= it.sessionId %>'
+    const NONCE = '<%= it.nonce %>'
     const SECRET = '<%= it.secret %>'
     const LOCALE = '<%= it.locale %>'
 
@@ -366,7 +367,7 @@
     // 通过 HTTP POST 向 DApp 发送消息（替代 WebSocket ws.send）
     // 注意：不能命名为 postMessage，否则会覆盖 window.postMessage，导致 MetaMask/OKX 等钱包通信失效
     function relayPost(data) {
-      return fetch(`/message?session=${SESSION_ID}&role=mobile&k=${SECRET}`, {
+      return fetch(`/message?session=${SESSION_ID}&role=mobile&n=${NONCE}&k=${SECRET}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
@@ -637,7 +638,7 @@
     async function init() {
       userInitiatedDisconnect = false
 
-      if (!SESSION_ID || !SECRET) {
+      if (!SESSION_ID || !NONCE || !SECRET) {
         showError(t('bridge.invalidLink'), t('bridge.sessionExpired'))
         return
       }
@@ -726,7 +727,7 @@
         eventSource = null
       }
 
-      const sseUrl = `/sse?session=${SESSION_ID}&role=mobile&k=${SECRET}`
+      const sseUrl = `/sse?session=${SESSION_ID}&role=mobile&n=${NONCE}&k=${SECRET}`
       eventSource = new EventSource(sseUrl)
 
       eventSource.onmessage = async (event) => {
@@ -796,7 +797,7 @@
           clearTimeout(reconnectUiTimer)
           reconnectUiTimer = null
           console.log('[Bridge] SSE permanently closed, checking session...')
-          fetch('/session/' + SESSION_ID).then(resp => {
+          fetch('/session/' + SESSION_ID + '?n=' + NONCE + '&k=' + SECRET).then(resp => {
             if (resp.ok) {
               // Session 还在，SSE 因其他原因关闭（如密钥错误、并发连接） — 可重连
               console.log('[Bridge] Session still valid, showing reconnect button')

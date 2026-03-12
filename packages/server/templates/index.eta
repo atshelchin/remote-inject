@@ -478,7 +478,7 @@
         type="text"
         id="sessionUrlInput"
         class="safe-app-input"
-        placeholder="<% if (it.locale === 'zh') { %>粘贴链接，如：https://xxx/s/ABCD?k=...<% } else { %>Paste link, e.g.: https://xxx/s/ABCD?k=...<% } %>"
+        placeholder="<% if (it.locale === 'zh') { %>粘贴链接，如：https://xxx/s/ABCD?n=...&k=...<% } else { %>Paste link, e.g.: https://xxx/s/ABCD?n=...&k=...<% } %>"
       >
     </div>
     <button id="connectBtn" class="safe-app-btn" onclick="handleConnect()">
@@ -487,9 +487,9 @@
     <div id="safeAppError" class="safe-app-error" style="display: none;"></div>
     <p class="safe-app-hint">
       <% if (it.locale === 'zh') { %>
-        提示：链接格式为 <code>/s/会话ID?k=密钥</code>，从 DApp 的二维码获取
+        提示：链接格式为 <code>/s/会话ID?n=...&k=密钥</code>，从 DApp 的二维码获取
       <% } else { %>
-        Hint: Link format is <code>/s/sessionId?k=secret</code>, get it from DApp's QR code
+        Hint: Link format is <code>/s/sessionId?n=...&k=secret</code>, get it from DApp's QR code
       <% } %>
     </p>
   </div>
@@ -769,17 +769,19 @@ bun run --filter @shelchin/remote-inject-server build</code></pre>
         const pathMatch = url.pathname.match(/\/s\/([A-Za-z0-9]+)/)
         if (pathMatch) {
           const sessionId = pathMatch[1]
+          const nonce = url.searchParams.get('n')
           const secret = url.searchParams.get('k')
-          if (sessionId && secret) {
-            return { sessionId, secret, lang, theme }
+          if (sessionId && nonce && secret) {
+            return { sessionId, nonce, secret, lang, theme }
           }
         }
 
         // Check for /landing or /bridge format
         const sessionId = url.searchParams.get('session')
+        const nonce = url.searchParams.get('n')
         const secret = url.searchParams.get('k')
-        if (sessionId && secret) {
-          return { sessionId, secret, lang, theme }
+        if (sessionId && nonce && secret) {
+          return { sessionId, nonce, secret, lang, theme }
         }
 
         return null
@@ -815,7 +817,7 @@ bun run --filter @shelchin/remote-inject-server build</code></pre>
       }
 
       // Build bridge URL with lang/theme params
-      let bridgeUrl = `/bridge?session=${encodeURIComponent(parsed.sessionId)}&k=${encodeURIComponent(parsed.secret)}`
+      let bridgeUrl = `/bridge?session=${encodeURIComponent(parsed.sessionId)}&n=${encodeURIComponent(parsed.nonce)}&k=${encodeURIComponent(parsed.secret)}`
 
       // Use lang/theme from pasted URL if available, otherwise use current page settings
       const lang = parsed.lang || LOCALE

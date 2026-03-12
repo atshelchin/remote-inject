@@ -173,6 +173,7 @@
   <script>
     // Server-injected data
     const SESSION_ID = '<%= it.sessionId %>'
+    const NONCE = '<%= it.nonce %>'
     const SECRET = '<%= it.secret %>'
     const LOCALE = '<%= it.locale %>'
     const THEME = '<%= it.theme || '' %>'
@@ -180,7 +181,7 @@
     // Build bridge URL with lang/theme params (preserve any URL query params)
     function getBridgeUrl() {
       const currentParams = new URLSearchParams(window.location.search)
-      let url = `/bridge?session=${SESSION_ID}&k=${SECRET}`
+      let url = `/bridge?session=${SESSION_ID}&n=${NONCE}&k=${SECRET}`
       // Priority: URL param > SSR value
       const lang = currentParams.get('lang') || LOCALE
       const theme = currentParams.get('theme') || THEME
@@ -436,7 +437,7 @@
     if (!SESSION_ID) {
       document.getElementById('status').className = 'status error'
       document.getElementById('status').textContent = t('landing.invalidSession')
-    } else if (!SECRET) {
+    } else if (!NONCE || !SECRET) {
       document.getElementById('status').className = 'status error'
       document.getElementById('status').textContent = t('landing.invalidLink')
     } else if (isSafeApp()) {

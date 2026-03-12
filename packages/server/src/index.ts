@@ -5,6 +5,7 @@ import { IS_COMPILED, handleEmbeddedStatic } from './static'
 import {
   createSession,
   getSession,
+  getOrCreateSession,
   getStats,
   isAtCapacity,
   registerConnection,
@@ -156,11 +157,11 @@ const app = new Elysia()
       // 没有 body 也可以创建 session
     }
 
-    const session = createSession(metadata)
+    const { session, key } = createSession(metadata)
     const protocol = request.headers.get('x-forwarded-proto') || 'http'
     const host = request.headers.get('host') || `${HOST}:${PORT}`
-    // URL 包含 secret，防止暴力枚举
-    const url = `${protocol}://${host}/s/${session.id}?k=${session.secret}`
+    // URL 包含 nonce + HMAC 派生的 key，防止暴力枚举
+    const url = `${protocol}://${host}/s/${session.id}?n=${session.nonce}&k=${key}`
 
     return {
       id: session.id,
@@ -170,8 +171,15 @@ const app = new Elysia()
   })
 
   // 获取 Session 信息（供 bridge 页面使用）
-  .get('/session/:id', ({ params }: { params: { id: string } }) => {
-    const session = getSession(params.id)
+  // 支持 ?n=NONCE&k=KEY 参数：session 不在内存时通过 HMAC 验证并按需创建
+  .get('/session/:id', ({ params, query }: { params: { id: string }; query: { n?: string; k?: string } }) => {
+    let session = getSession(params.id)
+
+    // session 不在内存 — 尝试通过 HMAC 无状态恢复
+    if (!session && query.n && query.k) {
+      session = getOrCreateSession(params.id, query.n, query.k) ?? undefined
+    }
+
     if (!session) {
       return new Response('Session not found', { status: 404 })
     }
@@ -188,17 +196,20 @@ const app = new Elysia()
   })
 
   // 短链接 - 直接渲染 landing 页面（不用重定向，避免 Safe Wallet iframe 丢失参数）
-  .get('/s/:id', ({ params, query, request }: { params: { id: string }; query: { k?: string; lang?: string; theme?: string }; request: Request }) => {
-    const session = getSession(params.id)
-    if (!session) {
-      return new Response('Session not found', { status: 404 })
-    }
-
+  // 支持无状态恢复：即使 session 不在内存中，只要 n+k 参数通过 HMAC 验证即可渲染
+  .get('/s/:id', ({ params, query, request }: { params: { id: string }; query: { n?: string; k?: string; lang?: string; theme?: string }; request: Request }) => {
+    const nonce = query.n || ''
     const secret = query.k || ''
+
+    // 尝试获取 session（内存中 或 通过 HMAC 按需创建）
+    let session = getSession(params.id)
+    if (!session && nonce && secret) {
+      session = getOrCreateSession(params.id, nonce, secret) ?? undefined
+    }
 
     // Prepare DApp metadata for SSR
     let dapp = null
-    if (session.metadata) {
+    if (session?.metadata) {
       try {
         const url = new URL(session.metadata.url)
         dapp = {
@@ -218,6 +229,7 @@ const app = new Elysia()
     // Render landing page directly with params embedded in HTML
     const html = renderPage('landing', request, {
       sessionId: params.id,
+      nonce,
       secret,
       dapp,
       // Pass lang/theme from URL query to force override
@@ -231,14 +243,18 @@ const app = new Elysia()
   })
 
   // Landing 页面 (SSR with i18n)
-  .get('/landing', ({ query, request }: { query: { session?: string; k?: string }; request: Request }) => {
+  .get('/landing', ({ query, request }: { query: { session?: string; n?: string; k?: string }; request: Request }) => {
     const sessionId = query.session
+    const nonce = query.n || ''
     const secret = query.k || ''
 
     // Prepare DApp metadata for SSR
     let dapp = null
     if (sessionId) {
-      const session = getSession(sessionId)
+      let session = getSession(sessionId)
+      if (!session && nonce && secret) {
+        session = getOrCreateSession(sessionId, nonce, secret) ?? undefined
+      }
       if (session?.metadata) {
         try {
           const url = new URL(session.metadata.url)
@@ -259,6 +275,7 @@ const app = new Elysia()
 
     const html = renderPage('landing', request, {
       sessionId,
+      nonce,
       secret,
       dapp,
     })
@@ -269,15 +286,19 @@ const app = new Elysia()
   })
 
   // Bridge 页面 (SSR with i18n)
-  .get('/bridge', ({ query, request }: { query: { session?: string; k?: string }; request: Request }) => {
+  .get('/bridge', ({ query, request }: { query: { session?: string; n?: string; k?: string }; request: Request }) => {
     const sessionId = query.session
+    const nonce = query.n || ''
     const secret = query.k || ''
 
     if (!sessionId) {
       return new Response('Missing session parameter', { status: 400 })
     }
 
-    const session = getSession(sessionId)
+    let session = getSession(sessionId)
+    if (!session && nonce && secret) {
+      session = getOrCreateSession(sessionId, nonce, secret) ?? undefined
+    }
 
     // Prepare DApp metadata for SSR
     let dapp = null
@@ -300,6 +321,7 @@ const app = new Elysia()
 
     const html = renderPage('bridge', request, {
       sessionId,
+      nonce,
       secret,
       dapp,
     })
@@ -332,8 +354,8 @@ const app = new Elysia()
   })
 
   // SSE 端点 — 服务端到客户端的事件流
-  .get('/sse', ({ query, request }: { query: { session?: string; role?: string; k?: string }; request: Request }) => {
-    const { session: sessionId, role, k } = query
+  .get('/sse', ({ query, request }: { query: { session?: string; role?: string; n?: string; k?: string }; request: Request }) => {
+    const { session: sessionId, role, n: nonce, k } = query
 
     if (!sessionId || !role) {
       return new Response('Missing session or role parameter', { status: 400 })
@@ -342,7 +364,11 @@ const app = new Elysia()
       return new Response('Invalid role, must be "dapp" or "mobile"', { status: 400 })
     }
 
-    const sessionData = getSession(sessionId)
+    // 尝试获取 session（内存中 或 通过 HMAC 按需创建）
+    let sessionData = getSession(sessionId)
+    if (!sessionData && nonce && k) {
+      sessionData = getOrCreateSession(sessionId, nonce, k) ?? undefined
+    }
     if (!sessionData) {
       return new Response('Session not found', { status: 404 })
     }
@@ -351,7 +377,7 @@ const app = new Elysia()
     }
 
     if (role === 'mobile') {
-      if (!k || !verifySecret(sessionId, k)) {
+      if (!k || !nonce || !verifySecret(sessionId, nonce, k)) {
         return new Response('Invalid or missing secret', { status: 403 })
       }
       if (isMobileLocked(sessionId)) {
@@ -428,8 +454,8 @@ const app = new Elysia()
   })
 
   // 消息端点 — 客户端到服务端（转发给对端的 SSE 流）
-  .post('/message', async ({ query, request }: { query: { session?: string; role?: string; k?: string }; request: Request }) => {
-    const { session: sessionId, role, k } = query
+  .post('/message', async ({ query, request }: { query: { session?: string; role?: string; n?: string; k?: string }; request: Request }) => {
+    const { session: sessionId, role, n: nonce, k } = query
 
     if (!sessionId || !role) {
       return new Response('Missing session or role parameter', { status: 400 })
@@ -444,7 +470,7 @@ const app = new Elysia()
     }
 
     if (role === 'mobile') {
-      if (!k || !verifySecret(sessionId, k)) {
+      if (!k || !nonce || !verifySecret(sessionId, nonce, k)) {
         return new Response('Invalid or missing secret', { status: 403 })
       }
     }
