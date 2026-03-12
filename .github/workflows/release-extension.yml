@@ -94,6 +94,30 @@ jobs:
           draft: false
           prerelease: false
 
+      # ---------------------------------------------------------------
+      # Chrome Web Store auto-publish
+      # Requires three GitHub repository secrets:
+      #   CWS_EXTENSION_ID   — the extension ID from the Developer Dashboard
+      #   CWS_CLIENT_ID      — OAuth2 client ID (Google Cloud Console)
+      #   CWS_CLIENT_SECRET  — OAuth2 client secret
+      #   CWS_REFRESH_TOKEN  — OAuth2 refresh token (see docs/cws-oauth-setup.md)
+      # ---------------------------------------------------------------
+      - name: Upload to Chrome Web Store
+        if: steps.version.outputs.changed == 'true' && env.CWS_EXTENSION_ID != ''
+        env:
+          CWS_EXTENSION_ID: ${{ secrets.CWS_EXTENSION_ID }}
+          CWS_CLIENT_ID: ${{ secrets.CWS_CLIENT_ID }}
+          CWS_CLIENT_SECRET: ${{ secrets.CWS_CLIENT_SECRET }}
+          CWS_REFRESH_TOKEN: ${{ secrets.CWS_REFRESH_TOKEN }}
+        run: |
+          npx -y chrome-webstore-upload-cli@3 upload \
+            --source "${{ steps.zip.outputs.path }}" \
+            --extension-id "$CWS_EXTENSION_ID" \
+            --client-id "$CWS_CLIENT_ID" \
+            --client-secret "$CWS_CLIENT_SECRET" \
+            --refresh-token "$CWS_REFRESH_TOKEN" \
+            --auto-publish
+
       - name: Skip release
         if: steps.version.outputs.changed == 'false'
         run: echo "Version not changed, skipping release"

@@ -1,0 +1,10 @@
+{
+  "appName": {
+    "message": "Remote Inject Bridge",
+    "description": "Name of the extension"
+  },
+  "appDesc": {
+    "message": "Connect any DApp to your mobile wallet via a relay server. No browser wallet needed.",
+    "description": "Short description shown in Chrome Web Store (max 132 chars)"
+  }
+}

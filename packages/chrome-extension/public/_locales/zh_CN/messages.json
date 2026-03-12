@@ -1,0 +1,10 @@
+{
+  "appName": {
+    "message": "Remote Inject Bridge",
+    "description": "扩展名称"
+  },
+  "appDesc": {
+    "message": "通过中继服务器将任意 DApp 连接到手机钱包，无需安装浏览器钱包插件。",
+    "description": "Chrome 应用商店简短描述（最多 132 个字符）"
+  }
+}

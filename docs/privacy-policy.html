@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Privacy Policy — Remote Inject Bridge</title>
+  <style>
+    body { font-family: system-ui, -apple-system, sans-serif; max-width: 720px; margin: 48px auto; padding: 0 24px; line-height: 1.7; color: #1a1a18; }
+    h1 { font-size: 1.6rem; margin-bottom: 4px; }
+    .meta { color: #888; font-size: 0.9rem; margin-bottom: 32px; }
+    h2 { font-size: 1.1rem; margin-top: 32px; }
+    p, li { font-size: 0.97rem; }
+    a { color: #c45a2c; }
+  </style>
+</head>
+<body>
+  <h1>Privacy Policy</h1>
+  <p class="meta">Remote Inject Bridge Chrome Extension · Last updated: March 2026</p>
+
+  <h2>What data we collect</h2>
+  <p>Remote Inject Bridge does <strong>not</strong> collect, transmit, or store any personal information. Specifically:</p>
+  <ul>
+    <li><strong>No browsing history</strong> — the extension reads only the background color of the active tab to adjust the popup theme. No page content, URLs, or history are sent anywhere.</li>
+    <li><strong>No wallet keys or seed phrases</strong> — the extension never has access to private keys. It only forwards JSON-RPC requests between the DApp and your mobile wallet.</li>
+    <li><strong>No analytics or telemetry</strong> — no usage data is collected or sent to any server.</li>
+  </ul>
+
+  <h2>Local storage</h2>
+  <p>The extension uses Chrome's <code>storage</code> API to save two items locally on your device:</p>
+  <ul>
+    <li>Your relay server URL (default: <code>remote-inject.awesometools.dev</code>)</li>
+    <li>The current session ID, so you don't need to re-scan the QR code on every visit</li>
+  </ul>
+  <p>This data never leaves your device except as part of the normal connection to your chosen relay server.</p>
+
+  <h2>Relay server communication</h2>
+  <p>When the bridge is active, the extension connects to a relay server via Server-Sent Events (SSE). The relay server:</p>
+  <ul>
+    <li>Forwards JSON-RPC messages between the DApp and your mobile wallet</li>
+    <li>Does not log or store transaction content</li>
+    <li>Can be self-hosted — see <a href="https://github.com/atshelchin/remote-inject">github.com/shelchin/remote-inject</a></li>
+  </ul>
+
+  <h2>Permissions</h2>
+  <ul>
+    <li><code>storage</code> — saves relay server URL and session ID locally</li>
+    <li><code>tabs</code> — reads the active tab's background color to match the popup theme</li>
+    <li><code>sidePanel</code> — enables the side panel UI mode</li>
+    <li><code>offscreen</code> — maintains the background SSE connection while you browse other tabs</li>
+  </ul>
+
+  <h2>Third-party services</h2>
+  <p>By default the extension connects to <strong>remote-inject.awesometools.dev</strong>, a relay server operated by the developer. You can switch to a self-hosted relay server at any time in the extension settings. The relay server's own privacy policy applies when you use it.</p>
+
+  <h2>Open source</h2>
+  <p>The full source code is available at <a href="https://github.com/atshelchin/remote-inject">github.com/shelchin/remote-inject</a> for independent review.</p>
+
+  <h2>Contact</h2>
+  <p>Questions? Open an issue at <a href="https://github.com/atshelchin/remote-inject/issues">github.com/shelchin/remote-inject/issues</a>.</p>
+</body>
+</html>
