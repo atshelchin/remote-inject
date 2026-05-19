@@ -49,3 +49,4 @@ node_modules
 test-results
 .output
 .wxt
+.VSCodeCounter
