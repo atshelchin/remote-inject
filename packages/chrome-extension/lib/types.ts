@@ -13,6 +13,7 @@ export interface ExtensionState {
   chainId?: string
   requests: RequestLogEntry[]
   error?: string
+  overrideEthereum?: boolean
 }
 
 export interface RequestLogEntry {
@@ -64,12 +65,16 @@ export type ContentToInjectedMessage =
 // Messages: Content Script <-> Background (chrome.runtime.Port)
 // ============================================================
 
-export type ContentToBackgroundMessage = {
-  type: 'rpc_request'
-  requestId: string
-  method: string
-  params?: unknown
-}
+export type ContentToBackgroundMessage =
+  | {
+      type: 'rpc_request'
+      requestId: string
+      method: string
+      params?: unknown
+    }
+  | {
+      type: 'connection_request'
+    }
 
 export type BackgroundToContentMessage =
   | {
@@ -123,6 +128,7 @@ export type PopupToBackgroundMessage =
   | { type: 'popup_disconnect' }
   | { type: 'popup_get_state' }
   | { type: 'popup_reconnect' }
+  | { type: 'popup_update_setting'; key: string; value: unknown }
 
 export type BackgroundToPopupResponse = {
   state: ExtensionState

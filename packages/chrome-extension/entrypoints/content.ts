@@ -33,18 +33,21 @@ export default defineContentScript({
       return true
     })
 
-    // Don't inject on the bridge server's own pages (bridge, landing, demo).
-    // When the extension has cached accounts, injected.ts sets window.ethereum with
-    // selectedAddress already populated, causing MetaMask/OKX to skip their auth popups
-    // or fail with "extension not found".
+    // Inject immediately at document_start for EIP-6963 timing.
+    // Previously wrapped in async chrome.storage.local.get() which delayed injection,
+    // causing DApps to miss the eip6963:requestProvider announcement window.
+    doInject()
+
+    // Asynchronously check if current page is the server's own page.
+    // If so, tell injected.ts to skip setting window.ethereum (to avoid breaking MetaMask/OKX).
+    // EIP-6963 is safe on all pages since DApps choose which provider to use.
     chrome.storage.local.get(STORAGE_KEYS.STATE, (result: any) => {
       try {
         const serverUrl = result[STORAGE_KEYS.STATE]?.serverUrl || DEFAULT_SERVER_URL
         if (new URL(serverUrl).origin === window.location.origin) {
-          return
+          window.postMessage({ source: MSG_SOURCE_CONTENT, type: 'skip_ethereum' }, '*')
         }
       } catch {}
-      doInject()
     })
 
     function doInject() {
@@ -100,15 +103,31 @@ export default defineContentScript({
         if (changes.debugMode) {
           window.postMessage({ source: MSG_SOURCE_CONTENT, type: 'debug_mode', enabled: !!changes.debugMode.newValue }, '*')
         }
+        // Forward overrideEthereum setting changes in real-time
+        if (changes[STORAGE_KEYS.STATE]) {
+          const newState = changes[STORAGE_KEYS.STATE].newValue
+          const oldState = changes[STORAGE_KEYS.STATE].oldValue
+          if (newState?.overrideEthereum !== oldState?.overrideEthereum) {
+            window.postMessage({ source: MSG_SOURCE_CONTENT, type: 'override_ethereum', enabled: !!newState?.overrideEthereum }, '*')
+          }
+        }
       })
 
-      // 5. Listen for messages from injected script
+      // 5. Forward overrideEthereum setting to injected script
+      chrome.storage.local.get(STORAGE_KEYS.STATE, (result: any) => {
+        const overrideEthereum = result[STORAGE_KEYS.STATE]?.overrideEthereum ?? false
+        if (overrideEthereum) {
+          window.postMessage({ source: MSG_SOURCE_CONTENT, type: 'override_ethereum', enabled: true }, '*')
+        }
+      })
+
+      // 6. Listen for messages from injected script
       window.addEventListener('message', (event) => {
         if (event.source !== window) return
         const data = event.data
         if (!data || data.source !== MSG_SOURCE_INJECTED) return
 
-        // Injected.js signals it's ready — re-send the buffered state + debug mode
+        // Injected.js signals it's ready — re-send the buffered state + settings
         if (data.type === 'ready') {
           if (lastStateUpdate) {
             window.postMessage({ ...lastStateUpdate, source: MSG_SOURCE_CONTENT }, '*')
@@ -116,6 +135,13 @@ export default defineContentScript({
           // Replay debug mode setting (initial send may have been lost before injected.js was ready)
           chrome.storage.local.get('debugMode', (result: any) => {
             window.postMessage({ source: MSG_SOURCE_CONTENT, type: 'debug_mode', enabled: !!result.debugMode }, '*')
+          })
+          // Replay overrideEthereum setting
+          chrome.storage.local.get(STORAGE_KEYS.STATE, (result: any) => {
+            const overrideEthereum = result[STORAGE_KEYS.STATE]?.overrideEthereum ?? false
+            if (overrideEthereum) {
+              window.postMessage({ source: MSG_SOURCE_CONTENT, type: 'override_ethereum', enabled: true }, '*')
+            }
           })
           return
         }
@@ -141,6 +167,16 @@ export default defineContentScript({
               '*',
             )
           }
+          return
+        }
+
+        if (data.type === 'connection_request') {
+          try {
+            port.postMessage({ type: 'connection_request' } satisfies ContentToBackgroundMessage)
+          } catch {
+            // Port disconnected; ignore — user can manually open extension
+          }
+          return
         }
       })
     }

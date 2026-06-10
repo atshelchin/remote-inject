@@ -32,5 +32,6 @@
   "method.eth_requestAccounts": "Request Accounts",
   "method.wallet_switchEthereumChain": "Switch Chain",
   "method.wallet_addEthereumChain": "Add Chain",
-  "method.eth_sign": "Sign"
+  "method.eth_sign": "Sign",
+  "setting.overrideEthereum": "覆盖 window.ethereum（兼容旧版 DApp）"
 }

@@ -217,6 +217,9 @@ export default defineUnlistedScript(() => {
             // to offscreen (which would fail immediately). This handles the case where
             // the user clicks "connect" on the DApp while scanning QR / wallet is connecting.
             log(`   → WAITING for wallet connection (requestAccounts)`)
+            // Signal extension to open side panel so user can connect
+            window.postMessage({ source: SOURCE_INJECTED, type: 'connection_request' }, '*')
+
             return new Promise<unknown>((resolve, reject) => {
               const timeout = setTimeout(() => {
                 cleanup()
@@ -362,6 +365,19 @@ export default defineUnlistedScript(() => {
         if (debugEnabled) console.log(TAG, STYLE, 'Debug logging enabled')
         break
 
+      case 'skip_ethereum':
+        skipEthereum = true
+        log('Server page detected — window.ethereum will not be set')
+        break
+
+      case 'override_ethereum':
+        overrideEthereum = !!data.enabled
+        log(`Override ethereum: ${overrideEthereum}`)
+        if (overrideEthereum && !ethereumSet) {
+          maybeSetWindowEthereum()
+        }
+        break
+
       case 'rpc_response': {
         const pending = pendingRequests.get(data.requestId)
         if (!pending) {
@@ -447,11 +463,8 @@ export default defineUnlistedScript(() => {
           if (!wasConnected) {
             emit('connect', { chainId: currentChainId })
             // Re-announce via EIP-6963 so DApps discover the now-connected provider.
-            // DApps that listed the provider before (with no accounts) will see the update.
-            if (providerActivated) {
-              log('🔔 Re-announcing EIP-6963 (provider connected)')
-              announceProvider()
-            }
+            log('🔔 Re-announcing EIP-6963 (provider connected)')
+            announceProvider()
           }
           // Only emit accountsChanged when accounts actually change
           const accountsChanged = prevAccounts.length !== currentAccounts.length ||
@@ -473,8 +486,8 @@ export default defineUnlistedScript(() => {
 
         // Mark state as ready so waiting requests can resolve
         markStateReady()
-        // Announce provider after first state_update so DApps see correct accounts
-        activateProvider()
+        // Try setting window.ethereum now that we have state
+        maybeSetWindowEthereum()
         // Notify any eth_requestAccounts waiters
         stateUpdateWaiters.forEach((fn) => fn())
         break
@@ -482,7 +495,7 @@ export default defineUnlistedScript(() => {
     }
   })
 
-  // ---- EIP-6963 (deferred until state is ready) ----
+  // ---- EIP-6963 (announce immediately for timing) ----
 
   const providerInfo = Object.freeze({
     uuid: 'f81d4fae-7dec-11d0-a765-00a0c91e6bf6',
@@ -500,28 +513,28 @@ export default defineUnlistedScript(() => {
     )
   }
 
-  // Delay provider activation until we have state from the extension.
-  // This prevents DApps (like Uniswap) from calling eth_accounts before
-  // the cached account data arrives, which would return [] and crash them.
-  let providerActivated = false
+  // Announce immediately at injection time — don't wait for state.
+  // DApps that call eth_accounts will get [] (correct: not connected yet).
+  // When state arrives, accountsChanged/connect events fire naturally.
+  announceProvider()
+  window.addEventListener('eip6963:requestProvider', announceProvider)
 
-  function activateProvider() {
-    if (providerActivated) return
-    providerActivated = true
+  // ---- window.ethereum (deferred, gated by flags) ----
 
-    log('🚀 Provider activated:', { connected: isConnected, accounts: currentAccounts, chainId: currentChainId })
+  let skipEthereum = false      // Set by content script if on server page
+  let overrideEthereum = false  // Set by content script from user setting
+  let ethereumSet = false       // Track if we already set window.ethereum
 
-    announceProvider()
-    window.addEventListener('eip6963:requestProvider', announceProvider)
-
-    // window.ethereum fallback for legacy DApps
-    if (typeof (window as any).ethereum === 'undefined') {
+  function maybeSetWindowEthereum() {
+    if (ethereumSet || skipEthereum) return
+    if (overrideEthereum || typeof (window as any).ethereum === 'undefined') {
       Object.defineProperty(window, 'ethereum', {
         value: provider,
         writable: true,
         configurable: true,
       })
-      log('   Set window.ethereum')
+      ethereumSet = true
+      log('Set window.ethereum' + (overrideEthereum ? ' (override mode)' : ''))
     }
   }
 
@@ -530,7 +543,7 @@ export default defineUnlistedScript(() => {
   window.postMessage({ source: SOURCE_INJECTED, type: 'ready' }, '*')
   log('🤝 Sent ready signal to content script')
 
-  // Fallback: if state_update doesn't arrive within 500ms, activate anyway
+  // Fallback: if state_update doesn't arrive within 500ms, try setting window.ethereum anyway
   // (e.g., extension is disconnected and has no state to send)
-  setTimeout(activateProvider, 500)
+  setTimeout(maybeSetWindowEthereum, 500)
 })

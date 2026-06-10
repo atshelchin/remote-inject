@@ -94,6 +94,10 @@
     chrome.runtime.sendMessage({ type: 'popup_reconnect' })
   }
 
+  function toggleOverrideEthereum(enabled: boolean) {
+    chrome.runtime.sendMessage({ type: 'popup_update_setting', key: 'overrideEthereum', value: enabled })
+  }
+
   async function openSidepanel() {
     const [tab] = await new Promise<chrome.tabs.Tab[]>((resolve) =>
       chrome.tabs.query({ active: true, currentWindow: true }, resolve)
@@ -169,6 +173,16 @@
     <div class="setup-view">
       <p class="setup-desc">{t('desc')}</p>
       <ServerConfig serverUrl={state.serverUrl} onConnect={connect} />
+      <label class="toggle-row">
+        <span class="toggle-label">{t('setting.overrideEthereum')}</span>
+        <input
+          type="checkbox"
+          class="toggle-input"
+          checked={state.overrideEthereum ?? false}
+          onchange={(e) => toggleOverrideEthereum(e.currentTarget.checked)}
+        />
+        <span class="toggle-switch"></span>
+      </label>
     </div>
 
   <!-- ── Connecting ── -->
@@ -244,6 +258,16 @@
         {/if}
       {/if}
       <RequestLog requests={state.requests} />
+      <label class="toggle-row">
+        <span class="toggle-label">{t('setting.overrideEthereum')}</span>
+        <input
+          type="checkbox"
+          class="toggle-input"
+          checked={state.overrideEthereum ?? false}
+          onchange={(e) => toggleOverrideEthereum(e.currentTarget.checked)}
+        />
+        <span class="toggle-switch"></span>
+      </label>
       <button class="btn-disconnect" onclick={disconnect}>{t('btn.disconnect')}</button>
     </div>
   {/if}
@@ -599,5 +623,60 @@
     color: var(--t3);
     text-align: center;
     margin: 8px 0 4px;
+  }
+
+  /* ── Toggle ── */
+  .toggle-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    background: var(--s1);
+    border: 1px solid var(--ln);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: border-color 0.12s;
+  }
+  .toggle-row:hover { border-color: var(--ln2); }
+
+  .toggle-label {
+    flex: 1;
+    font-size: 13px;
+    color: var(--t2);
+  }
+
+  .toggle-input {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+  }
+
+  .toggle-switch {
+    position: relative;
+    width: 34px;
+    height: 18px;
+    background: var(--s2);
+    border-radius: 9px;
+    transition: background 0.2s;
+    flex-shrink: 0;
+  }
+  .toggle-switch::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 14px;
+    height: 14px;
+    background: var(--t3);
+    border-radius: 50%;
+    transition: transform 0.2s, background 0.2s;
+  }
+  .toggle-input:checked + .toggle-switch {
+    background: var(--accent-bg);
+  }
+  .toggle-input:checked + .toggle-switch::after {
+    transform: translateX(16px);
+    background: var(--accent);
   }
 </style>

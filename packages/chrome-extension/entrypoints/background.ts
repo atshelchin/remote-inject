@@ -127,6 +127,8 @@ export default defineBackground(() => {
           method: msg.method,
           params: msg.params,
         })
+      } else if (msg.type === 'connection_request') {
+        handleConnectionRequest(tabId)
       }
     })
 
@@ -207,6 +209,14 @@ export default defineBackground(() => {
       case 'popup_get_state':
         getState().then((state) => sendResponse({ state }))
         return true // keep sendResponse channel open for async
+
+      case 'popup_update_setting': {
+        const { key, value } = popMsg
+        if (key === 'overrideEthereum') {
+          updateState({ overrideEthereum: !!value })
+        }
+        return
+      }
     }
   })
 
@@ -236,6 +246,36 @@ export default defineBackground(() => {
       })
     } else {
       sendToOffscreen({ type: 'connect', serverUrl })
+    }
+  }
+
+  // ---- Auto-open side panel when DApp requests connection ----
+
+  let lastSidePanelOpenTime = 0
+
+  async function handleConnectionRequest(tabId: number) {
+    const state = await getState()
+
+    // Only open side panel if truly disconnected.
+    // Don't open if already connecting/waiting/reconnecting (user already initiated).
+    if (state.status !== 'disconnected') {
+      console.log(`[background] connection_request from tab ${tabId}: status=${state.status}, skipping side panel`)
+      return
+    }
+
+    // Debounce: don't spam side panel opens
+    const now = Date.now()
+    if (now - lastSidePanelOpenTime < 3000) {
+      console.log(`[background] connection_request from tab ${tabId}: debounced`)
+      return
+    }
+    lastSidePanelOpenTime = now
+
+    console.log(`[background] connection_request from tab ${tabId}: opening side panel`)
+    try {
+      await chrome.sidePanel.open({ tabId })
+    } catch (err: any) {
+      console.warn(`[background] Failed to open side panel:`, err.message)
     }
   }
 
