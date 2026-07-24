@@ -7,10 +7,7 @@
   "scripts": {
     "dev": "turbo run dev",
     "build": "turbo run build",
-    "clean": "turbo run clean",
-    "build:exe": "cd packages/server && bun run build:exe",
-    "build:exe:linux": "cd packages/server && bun run build:exe:linux",
-    "build:exe:win": "cd packages/server && bun run build:exe:win"
+    "clean": "turbo run clean"
   },
   "devDependencies": {
     "turbo": "^2.8.3",

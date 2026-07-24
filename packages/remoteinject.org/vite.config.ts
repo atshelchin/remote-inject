@@ -14,6 +14,9 @@ export default defineConfig({
 			adapter: adapter()
 		})
 	],
+	ssr: {
+		noExternal: ['lucide-svelte', '@shelchin/i18n-sveltekit']
+	},
 	test: {
 		expect: { requireAssertions: true },
 		projects: [

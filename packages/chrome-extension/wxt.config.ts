@@ -1,24 +1,29 @@
-import { defineConfig } from 'wxt'
+import { defineConfig } from 'wxt';
 
 export default defineConfig({
+  srcDir: 'src',
   modules: ['@wxt-dev/module-svelte'],
-  srcDir: '.',
   manifest: {
-    name: '__MSG_appName__',
-    description: '__MSG_appDesc__',
-    default_locale: 'en',
-    permissions: ['storage', 'offscreen', 'sidePanel', 'activeTab'],
-    minimum_chrome_version: '116',
-    icons: {
-      16: 'assets/icon-16.png',
-      48: 'assets/icon-48.png',
-      128: 'assets/icon-128.png',
+    name: 'Remote Inject',
+    description: 'Bridge any dApp to your mobile wallet via the open WalletPair protocol — no registration, end-to-end encrypted.',
+    permissions: ['storage', 'sidePanel', 'alarms'],
+    host_permissions: ['<all_urls>'],
+    side_panel: {
+      default_path: 'sidepanel.html',
     },
     web_accessible_resources: [
       {
-        resources: ['injected.js'],
+        resources: ['icon/*'],
         matches: ['<all_urls>'],
       },
     ],
   },
-})
+  hooks: {
+    'build:manifestGenerated': (wxt, manifest) => {
+      // Remove default_popup so clicking the icon opens the side panel instead
+      if (manifest.action) {
+        delete (manifest.action as any).default_popup;
+      }
+    },
+  },
+});

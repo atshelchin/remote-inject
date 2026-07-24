@@ -1,0 +1,347 @@
+<script lang="ts">
+  import { getExtensionState, onStateUpdate, sendToBackground } from '@/lib/messaging';
+  import type { ExtensionState } from '@/lib/types';
+  import QrPairing from '@/components/QrPairing.svelte';
+  import ConnectedView from '@/components/ConnectedView.svelte';
+  import SettingsView from '@/components/SettingsView.svelte';
+  import { Settings, Info } from 'lucide-svelte';
+  import { i18n, setLang, t } from '@/lib/i18n.svelte';
+
+  // Named `extState` (not `state`) to avoid colliding with the `$state` rune,
+  // which Svelte would otherwise read as a store subscription (`$state`).
+  let extState = $state<ExtensionState>({ phase: 'idle' });
+  let loading = $state(false);
+  let page = $state<'main' | 'settings'>('main');
+
+  // Fetch initial state
+  $effect(() => {
+    getExtensionState().then((s) => {
+      extState = s;
+    });
+    const unsub = onStateUpdate((s) => {
+      // Don't interrupt loading transition — startPairing handles its own state
+      if (!loading) {
+        extState = s;
+      }
+    });
+    return unsub;
+  });
+
+  async function startPairing() {
+    loading = true;
+    const [s] = await Promise.all([
+      sendToBackground<ExtensionState>({ action: 'start-pairing' }),
+      new Promise((r) => setTimeout(r, 800)), // smooth transition before showing QR
+    ]);
+    extState = s;
+    loading = false;
+  }
+
+  async function disconnect() {
+    await sendToBackground({ action: 'disconnect' });
+    extState = { phase: 'idle' };
+  }
+
+</script>
+
+<div class="popup">
+  <header class="header">
+    <div class="header-left">
+      <img src="/icon/48.png" alt="Remote Inject" class="logo-img" />
+      <span class="header-title">Remote Inject</span>
+    </div>
+    <div class="header-right">
+      <button
+        class="lang-btn"
+        onclick={() => setLang(i18n.lang === 'zh' ? 'en' : 'zh')}
+        title={t('Switch to Chinese', '切换到英文')}
+        aria-label={t('Switch language', '切换语言')}
+      >
+        {i18n.lang === 'zh' ? '中' : 'EN'}
+      </button>
+      {#if page === 'main'}
+        <button class="icon-btn" onclick={() => (page = 'settings')} title={t('Settings', '设置')} aria-label={t('Settings', '设置')}>
+          <Settings size={18} strokeWidth={1.5} />
+        </button>
+      {/if}
+    </div>
+  </header>
+
+  <main class="content">
+    {#if page === 'settings'}
+      <SettingsView onBack={() => (page = 'main')} />
+    {:else if extState.phase === 'idle' || extState.phase === 'error'}
+      <div class="idle-view animate-in">
+        <!-- Decorative glow -->
+        <div class="hero-glow"></div>
+
+        <div class="hero-text">
+          <h2 class="title">{t('Connect Your Wallet', '连接你的钱包')}</h2>
+          <p class="subtitle">
+            {t('Pair with your mobile wallet to use dApps on this browser', '与手机钱包配对，即可在此浏览器上使用 dApp')}
+          </p>
+        </div>
+        {#if extState.error}
+          <div class="error-banner">
+            <Info size={14} strokeWidth={2} />
+            <span>{extState.error}</span>
+          </div>
+        {/if}
+        <button class="btn-primary" onclick={startPairing} disabled={loading}>
+          {#if loading}
+            <span class="spinner"></span>
+          {:else}
+            {t('Pair Wallet', '配对钱包')}
+          {/if}
+        </button>
+      </div>
+    {:else if extState.phase === 'pairing'}
+      <div class="animate-slide">
+        <QrPairing uri={extState.pairingUri ?? ''} fingerprint={extState.sessionFingerprint} onCancel={disconnect} />
+      </div>
+    {:else if extState.phase === 'connected'}
+      <div class="animate-scale">
+        <ConnectedView wallet={extState.wallet} onDisconnect={disconnect} signingInProgress={extState.signingInProgress} />
+      </div>
+    {:else if extState.phase === 'disconnected'}
+      <div class="disconnected-view" role="status" aria-live="polite">
+        <div class="status-badge orange">
+          <span class="status-dot orange"></span>
+          {t('Reconnecting…', '正在重连…')}
+        </div>
+        <p class="subtitle">{t('Connection lost. Attempting to reconnect…', '连接已断开，正在尝试重连…')}</p>
+        <div class="disc-actions">
+          <button class="btn-secondary" onclick={startPairing} disabled={loading}>{t('Re-pair', '重新配对')}</button>
+          <button class="btn-secondary" onclick={disconnect}>{t('Cancel', '取消')}</button>
+        </div>
+      </div>
+    {/if}
+  </main>
+</div>
+
+<style>
+  .popup {
+    display: flex;
+    flex-direction: column;
+    min-height: 480px;
+  }
+
+  .header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 13px 16px;
+    border-bottom: 1px solid var(--border);
+    background: rgba(255, 255, 255, 0.82);
+    backdrop-filter: blur(12px);
+  }
+
+  .header-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .logo-img {
+    width: 22px;
+    height: 22px;
+    border-radius: 5px;
+    box-shadow: 0 3px 10px rgba(48, 70, 120, 0.16);
+  }
+
+  .header-title {
+    font-weight: 700;
+    font-size: 15px;
+    letter-spacing: -0.02em;
+  }
+
+  .icon-btn {
+    background: none;
+    color: var(--text-dim);
+    padding: 8px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+  }
+  .icon-btn:hover {
+    background: var(--bg-hover);
+    color: var(--text);
+  }
+
+  .content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding: 18px 16px;
+  }
+
+  .idle-view,
+  .disconnected-view {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    text-align: center;
+    position: relative;
+  }
+
+  .hero-glow {
+    position: absolute;
+    top: 20%;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 200px;
+    height: 200px;
+    background: radial-gradient(circle, rgba(56, 103, 244, 0.13) 0%, transparent 70%);
+    pointer-events: none;
+  }
+
+  .hero-text {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    position: relative;
+    z-index: 1;
+  }
+
+  .title {
+    font-size: 19px;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+  }
+
+  .subtitle {
+    font-size: 13.5px;
+    color: var(--text-dim);
+    max-width: 280px;
+    line-height: 1.55;
+  }
+
+  .error-banner {
+    background: var(--red-dim);
+    color: var(--red);
+    font-size: 12px;
+    padding: 10px 14px;
+    border-radius: var(--radius-sm);
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border: 1px solid rgba(239, 68, 68, 0.15);
+  }
+
+  .btn-primary {
+    background: var(--accent);
+    color: white;
+    font-size: 14px;
+    font-weight: 600;
+    padding: 13px 32px;
+    border-radius: var(--radius);
+    width: 100%;
+    max-width: 280px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin-top: 12px;
+    position: relative;
+    z-index: 1;
+    box-shadow: 0 2px 12px rgba(37, 99, 235, 0.25);
+  }
+  .btn-primary:hover:not(:disabled) {
+    background: var(--accent-hover);
+    box-shadow: 0 4px 20px rgba(37, 99, 235, 0.35);
+    transform: translateY(-1px);
+  }
+  .btn-primary:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  .btn-secondary {
+    background: var(--bg-card);
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 500;
+    padding: 10px 24px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+  }
+  .btn-secondary:hover:not(:disabled) {
+    background: var(--bg-hover);
+  }
+  .btn-secondary:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .disc-actions {
+    display: flex;
+    gap: 8px;
+  }
+
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .lang-btn {
+    background: none;
+    color: var(--text-dim);
+    font-size: 12px;
+    font-weight: 600;
+    padding: 6px 8px;
+    border-radius: 8px;
+    min-width: 32px;
+  }
+  .lang-btn:hover {
+    background: var(--bg-hover);
+    color: var(--text);
+  }
+
+  .status-badge {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: 500;
+    padding: 6px 14px;
+    border-radius: 100px;
+  }
+  .status-badge.orange {
+    background: var(--orange-dim);
+    color: var(--orange);
+  }
+
+  .status-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+  }
+  .status-dot.orange {
+    background: var(--orange);
+    animation: pulse 1.5s ease-in-out infinite;
+  }
+
+  .spinner {
+    width: 16px;
+    height: 16px;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-top-color: white;
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+</style>
