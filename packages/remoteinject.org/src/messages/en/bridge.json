@@ -21,5 +21,6 @@
   "bridge.connected.keepOpen": "Keep this page open. Approve requests in your wallet as they arrive.",
   "bridge.error.title": "Something went wrong",
   "bridge.error.retry": "Try again",
-  "bridge.review.signWith": "Sign with"
+  "bridge.review.signWith": "Sign with",
+  "bridge.review.rescan": "Wallet not listed? Re-detect"
 }

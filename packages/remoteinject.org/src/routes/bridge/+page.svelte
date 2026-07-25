@@ -10,9 +10,16 @@
 		provider: any;
 	}
 
-	// The bridge signs with a real injected wallet on THIS page — never Remote
-	// Inject itself (bridging to our own provider would loop forever).
-	const REMOTE_INJECT_RDNS = 'com.remote-inject.bridge';
+	// The bridge signs with a REAL injected wallet on this page. WalletPair-style
+	// bridges (Remote Inject, the WalletPair extension) are themselves dApp-side
+	// relays with no local keys — selecting one would loop forever — so they are
+	// excluded from the "sign with" list.
+	const BRIDGE_RDNS = new Set(['com.remote-inject.bridge', 'org.walletpair.extension']);
+
+	function isBridgeProvider(w: InjectedWallet): boolean {
+		const p = w.provider;
+		return !!(p?.isRemoteInject || p?.isWalletPair) || BRIDGE_RDNS.has(w.info.rdns);
+	}
 
 	let phase = $state<Phase>('loading');
 	let errorMsg = $state('');
@@ -39,44 +46,50 @@
 	 * is excluded — you can't bridge a wallet to itself. A legacy window.ethereum
 	 * that didn't announce (and isn't Remote Inject) is added as a fallback.
 	 */
-	function discoverWallets(): void {
-		const found = new Map<string, InjectedWallet>();
-		const add = (w: InjectedWallet | undefined) => {
-			if (!w?.info?.rdns || !w.provider) return;
-			if (w.info.rdns === REMOTE_INJECT_RDNS || w.provider.isRemoteInject) return;
-			if (found.has(w.info.rdns)) return;
-			found.set(w.info.rdns, w);
-			wallets = [...found.values()];
-			if (!selectedRdns) selectedRdns = w.info.rdns;
-			if (phase === 'loading') phase = 'review';
-		};
+	const found = new Map<string, InjectedWallet>();
 
-		window.addEventListener('eip6963:announceProvider', (e: any) => add(e.detail));
+	function addWallet(w: InjectedWallet | undefined) {
+		if (!w?.info?.rdns || !w.provider) return;
+		if (isBridgeProvider(w)) return; // never sign with another WalletPair bridge
+		if (found.has(w.info.rdns)) return;
+		found.set(w.info.rdns, w);
+		wallets = [...found.values()];
+		if (!selectedRdns) selectedRdns = w.info.rdns;
+		if (phase === 'loading') phase = 'review';
+	}
+
+	function requestProviders() {
 		window.dispatchEvent(new Event('eip6963:requestProvider'));
-
-		// Legacy window.ethereum fallback (skip if it's us or already announced).
+		// Legacy window.ethereum fallback (skip bridges / already-announced).
 		const legacy = (globalThis as any).ethereum;
-		if (legacy && !legacy.isRemoteInject) {
-			setTimeout(() => {
-				const already = [...found.values()].some((w) => w.provider === legacy);
-				if (!already) {
-					add({
-						info: {
-							uuid: 'legacy',
-							name: legacy.isMetaMask ? 'MetaMask' : 'Injected wallet',
-							icon: '',
-							rdns: 'legacy.window.ethereum'
-						},
-						provider: legacy
-					});
-				}
-			}, 250);
+		if (legacy && !legacy.isRemoteInject && !legacy.isWalletPair) {
+			const already = [...found.values()].some((w) => w.provider === legacy);
+			if (!already) {
+				addWallet({
+					info: {
+						uuid: 'legacy',
+						name: legacy.isMetaMask ? 'MetaMask' : 'Injected wallet',
+						icon: '',
+						rdns: 'legacy.window.ethereum'
+					},
+					provider: legacy
+				});
+			}
 		}
+	}
+
+	function discoverWallets(): void {
+		// Keep the listener attached so late announcements still register; re-request
+		// a couple of times because some wallets announce on load, others on request.
+		window.addEventListener('eip6963:announceProvider', (e: any) => addWallet(e.detail));
+		requestProviders();
+		setTimeout(requestProviders, 300);
+		setTimeout(requestProviders, 800);
 
 		// If nothing eligible announced, fall to the "open in a wallet" guidance.
 		setTimeout(() => {
 			if (phase === 'loading') phase = 'no-wallet';
-		}, 450);
+		}, 1200);
 	}
 
 	function caip2From(hexChain: string): string {
@@ -311,6 +324,9 @@
 							{selectedWallet?.info.name ?? '—'}
 						</span>
 					{/if}
+					<button type="button" class="rescan" onclick={requestProviders}>
+						{t('bridge.review.rescan')}
+					</button>
 				</label>
 
 				<button class="btn btn-primary big" onclick={connect} disabled={phase === 'connecting' || !selectedWallet}>
@@ -458,6 +474,20 @@
 		width: 18px;
 		height: 18px;
 		border-radius: 4px;
+	}
+
+	.rescan {
+		align-self: flex-start;
+		background: none;
+		border: none;
+		padding: 2px 0;
+		font-size: 11px;
+		color: var(--color-text-muted);
+		text-decoration: underline;
+	}
+
+	.rescan:hover {
+		color: var(--color-accent);
 	}
 
 	.center-col {

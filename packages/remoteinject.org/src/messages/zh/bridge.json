@@ -21,5 +21,6 @@
   "bridge.connected.keepOpen": "请保持本页打开。请求到达时在钱包中确认。",
   "bridge.error.title": "出错了",
   "bridge.error.retry": "重试",
-  "bridge.review.signWith": "使用钱包签名"
+  "bridge.review.signWith": "使用钱包签名",
+  "bridge.review.rescan": "没看到你的钱包？重新检测"
 }
