@@ -1,6 +1,13 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { WalletSession, isEvmRequest, type EvmRequest, type JsonValue } from '$lib/walletpair/protocol';
+	import {
+		WalletSession,
+		isEvmRequest,
+		type EvmRequest,
+		type JsonValue,
+		type ParticipantMeta
+	} from '$lib/walletpair/protocol';
+	import { chainIdFromHex, chainLogoUrl, fallbackChainName, fetchChainName } from '$lib/chain-meta';
 	import { t } from '$lib/i18n';
 
 	type Phase = 'loading' | 'no-uri' | 'no-wallet' | 'review' | 'connecting' | 'connected' | 'error';
@@ -27,11 +34,35 @@
 	let code = $state('');
 	let account = $state('');
 	let chainHex = $state('');
+	let chainName = $state('');
+	let chainLogo = $state('');
+	let chainLogoOk = $state(true);
 	let logs = $state<{ dir: 'in' | 'out' | 'err'; text: string; time: string }[]>([]);
 	let wallets = $state<InjectedWallet[]>([]);
 	let selectedRdns = $state('');
+	// The relay never tells a late joiner that the dApp is present, so "connected"
+	// only means "joined the channel". If no request arrives shortly after, warn the
+	// user to re-check the pairing code — the usual cause is a stale/mismatched link.
+	let firstRequestSeen = $state(false);
+	let waitingForApp = $state(false);
+	let waitTimer: ReturnType<typeof setTimeout> | null = null;
+	// Methods that make the wallet prompt for a signature/confirmation; while one is
+	// in flight the bridge tells the user to switch to their wallet to approve it.
+	const CONFIRMATION_METHODS = new Set([
+		'eth_sendTransaction',
+		'personal_sign',
+		'eth_sign',
+		'eth_signTypedData',
+		'eth_signTypedData_v1',
+		'eth_signTypedData_v3',
+		'eth_signTypedData_v4',
+		'wallet_addEthereumChain',
+		'wallet_switchEthereumChain'
+	]);
+	let signingMethod = $state<string | null>(null);
 
 	let session: WalletSession | null = null;
+	let pairingUri: string | null = null;
 
 	const selectedWallet = $derived(
 		wallets.find((w) => w.info.rdns === selectedRdns) ?? wallets[0]
@@ -92,6 +123,28 @@
 		}, 1200);
 	}
 
+	/**
+	 * The wallet-side identity the extension displays as the connected wallet.
+	 * Uses the selected injected wallet's name so the sidepanel shows e.g.
+	 * "OKX Wallet" rather than the generic bridge name. The protocol requires an
+	 * https icon, so a data-URI wallet logo falls back to the Remote Inject icon.
+	 */
+	function walletMetaFor(w: InjectedWallet): ParticipantMeta {
+		const icon = w.info.icon?.startsWith('https:') ? w.info.icon : 'https://remoteinject.org/icon.png';
+		const name = (w.info.name || 'Wallet').slice(0, 128);
+		return { name, url: 'https://remoteinject.org', icon };
+	}
+
+	async function refreshChainMeta(hex: string) {
+		const id = chainIdFromHex(hex);
+		// Paint immediately from the built-in table + CDN logo, then upgrade the
+		// name from the canonical dataset when it resolves.
+		chainName = fallbackChainName(id);
+		chainLogo = id > 0 ? chainLogoUrl(id) : '';
+		chainLogoOk = true;
+		if (id > 0) chainName = await fetchChainName(id);
+	}
+
 	function caip2From(hexChain: string): string {
 		try {
 			return 'eip155:' + BigInt(hexChain).toString(10);
@@ -130,6 +183,7 @@
 	onMount(() => {
 		pageUrl = location.href;
 		const uri = getPairingUri();
+		pairingUri = uri;
 		const target =
 			location.host + location.pathname + (uri ? '?uri=' + encodeURIComponent(uri) : location.hash);
 		mmLink = 'https://metamask.app.link/dapp/' + target;
@@ -139,17 +193,13 @@
 			return;
 		}
 		try {
-			session = new WalletSession({
-				meta: {
-					name: 'Remote Inject',
-					url: 'https://remoteinject.org',
-					icon: 'https://remoteinject.org/icon.png'
-				},
-				onPeer: (peer) => (dapp = peer),
-				onMessage: handleMessage,
-				onError: (e) => {
-					errorMsg = e.message;
-				}
+			// A neutral session drives the review screen (peer + pairing code). The
+			// real session is rebuilt at connect() with the chosen wallet's identity;
+			// the pairing code is derived from the dApp side, so it is unchanged.
+			session = buildSession({
+				name: 'Remote Inject',
+				url: 'https://remoteinject.org',
+				icon: 'https://remoteinject.org/icon.png'
 			});
 			session.prepare(uri);
 			code = session.pairingCode;
@@ -162,12 +212,36 @@
 		discoverWallets();
 	});
 
+	function buildSession(meta: ParticipantMeta): WalletSession {
+		return new WalletSession({
+			meta,
+			onPeer: (peer) => (dapp = peer),
+			onMessage: handleMessage,
+			onError: (e) => {
+				errorMsg = e.message;
+			}
+		});
+	}
+
 	async function connect() {
-		if (!session || !eth()) return;
+		const w = selectedWallet;
+		if (!w || !pairingUri) return;
 		phase = 'connecting';
 		try {
+			// Rebuild with the selected wallet's identity so the extension shows the
+			// actual signing wallet. prepare() re-derives keys; the code is unchanged.
+			session?.close();
+			session = buildSession(walletMetaFor(w));
+			session.prepare(pairingUri);
+			code = session.pairingCode;
 			await session.confirm();
 			phase = 'connected';
+			// Joined the channel — but the dApp only truly reaches us if it is on the
+			// same channel. Surface a code-mismatch hint if nothing arrives soon.
+			if (waitTimer) clearTimeout(waitTimer);
+			waitTimer = setTimeout(() => {
+				if (!firstRequestSeen) waitingForApp = true;
+			}, 8000);
 			subscribeWalletEvents();
 			await authorizeAndSync();
 		} catch (e: any) {
@@ -179,7 +253,16 @@
 	async function handleMessage(message: JsonValue, chainId: string) {
 		if (!isEvmRequest(message as JsonValue)) return;
 		const req = message as EvmRequest;
+		// First real request proves the dApp is on our channel — clear the warning.
+		firstRequestSeen = true;
+		waitingForApp = false;
+		if (waitTimer) {
+			clearTimeout(waitTimer);
+			waitTimer = null;
+		}
 		log('in', req.method);
+		const needsConfirm = CONFIRMATION_METHODS.has(req.method);
+		if (needsConfirm) signingMethod = req.method;
 		try {
 			const result = await eth().request({ method: req.method, params: req.params });
 			session!.send({ id: req.id, result: (result ?? null) as JsonValue }, chainId);
@@ -191,6 +274,8 @@
 				chainId
 			);
 			log('err', `${req.method} ✕`);
+		} finally {
+			if (needsConfirm) signingMethod = null;
 		}
 	}
 
@@ -206,6 +291,7 @@
 			account = Array.isArray(accts) ? (accts[0] ?? '') : '';
 			const cid = await eth().request({ method: 'eth_chainId' });
 			chainHex = cid;
+			refreshChainMeta(cid);
 			const caip = caip2From(cid);
 			session!.send({ event: 'connect', data: { chainId: cid } as JsonValue }, caip);
 			session!.send({ event: 'chainChanged', data: cid }, caip);
@@ -224,6 +310,7 @@
 		});
 		e.on('chainChanged', (c: string) => {
 			chainHex = c;
+			refreshChainMeta(c);
 			session?.send({ event: 'chainChanged', data: c }, caip2From(c));
 		});
 	}
@@ -339,16 +426,52 @@
 				<div class="state-icon ok">✓</div>
 				<h2>{t('bridge.connected.title')}</h2>
 				{#if dapp}<p class="lead">{dapp.name}</p>{/if}
+				{#if signingMethod}
+					<div class="signing-banner" role="alert">
+						<span class="spinner"></span>
+						<span>{t('bridge.connected.confirm')}<code>{signingMethod}</code></span>
+					</div>
+				{/if}
 				<div class="wallet-info">
+					{#if selectedWallet}
+						<div class="wallet-row">
+							<span class="wallet-label">{t('bridge.connected.wallet')}</span>
+							<span class="wallet-value chain-value">
+								{#if selectedWallet.info.icon}
+									<img class="chain-logo" src={selectedWallet.info.icon} alt="" />
+								{/if}
+								{selectedWallet.info.name}
+							</span>
+						</div>
+					{/if}
 					<div class="wallet-row">
 						<span class="wallet-label">{t('bridge.connected.account')}</span>
 						<span class="wallet-value">{shorten(account) || '—'}</span>
 					</div>
 					<div class="wallet-row">
 						<span class="wallet-label">{t('bridge.connected.chain')}</span>
-						<span class="wallet-value">{chainHex || '—'}</span>
+						<span class="wallet-value chain-value">
+							{#if chainLogo && chainLogoOk}
+								<img
+									class="chain-logo"
+									src={chainLogo}
+									alt=""
+									onerror={() => (chainLogoOk = false)}
+								/>
+							{/if}
+							{chainName || chainHex || '—'}
+						</span>
 					</div>
 				</div>
+				<div class="pairing-check">
+					<span class="pairing-label">{t('bridge.connected.pairing')}</span>
+					<span class="pairing-code">{code.slice(0, 2)} {code.slice(2)}</span>
+				</div>
+				{#if waitingForApp}
+					<p class="warn">
+						{t('bridge.connected.waiting')}
+					</p>
+				{/if}
 				{#if !account}
 					<p class="warn">
 						{t('bridge.connected.approve')}
@@ -653,6 +776,63 @@
 		font-family: var(--font-mono);
 		font-size: 12px;
 		font-weight: 500;
+	}
+
+	.chain-value {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		font-family: inherit;
+		max-width: 200px;
+		overflow: hidden;
+		white-space: nowrap;
+		text-overflow: ellipsis;
+	}
+
+	.chain-logo {
+		width: 16px;
+		height: 16px;
+		border-radius: 50%;
+		flex-shrink: 0;
+		object-fit: cover;
+	}
+
+	.pairing-check {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 8px;
+		margin: 4px 0 12px;
+		font-size: 12px;
+		color: var(--color-text-muted);
+	}
+
+	.pairing-code {
+		font-family: var(--font-mono);
+		font-weight: 700;
+		letter-spacing: 2px;
+		color: var(--color-accent);
+	}
+
+	.signing-banner {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 8px;
+		margin: 12px 0;
+		padding: 10px 14px;
+		font-size: 13px;
+		font-weight: 500;
+		color: var(--color-warning);
+		background: var(--color-warning-bg);
+		border-radius: var(--radius-md);
+	}
+
+	.signing-banner code {
+		margin-left: 6px;
+		font-family: var(--font-mono);
+		font-size: 11px;
+		opacity: 0.8;
 	}
 
 	.log {

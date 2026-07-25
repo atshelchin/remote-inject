@@ -26,6 +26,9 @@ export const LOCAL_METHODS: ReadonlySet<string> = new Set([
   'net_version',
   'eth_accounts',
   'wallet_getPermissions',
+  // EIP-5792 capability probe — answered locally with "no capabilities" so dApps
+  // use plain eth_sendTransaction rather than wallet_sendCalls (see WALLET_METHODS).
+  'wallet_getCapabilities',
 ]);
 
 /** Read-only methods routed to a public RPC node, NOT the wallet */
@@ -53,9 +56,12 @@ export const WALLET_METHODS: ReadonlySet<string> = new Set([
   'eth_signTypedData_v1',
   'eth_signTypedData_v3',
   'eth_signTypedData_v4',
-  'wallet_sendCalls',
-  'wallet_getCallsStatus',
-  'wallet_getCapabilities',
+  // NOTE: EIP-5792 (wallet_sendCalls / wallet_getCallsStatus / wallet_getCapabilities)
+  // is intentionally NOT relayed. Advertising atomic-batch support leads dApps
+  // (e.g. Uniswap) to send swaps as wallet_sendCalls, which does not reliably
+  // surface a signature prompt when relayed to a remote wallet. getCapabilities
+  // is answered locally with {} (LOCAL_METHODS) so dApps fall back to the
+  // universally-supported eth_sendTransaction path.
 ]);
 
 /** Methods that are explicitly unsupported */

@@ -101,7 +101,7 @@
       </div>
     {:else if extState.phase === 'connected'}
       <div class="animate-scale">
-        <ConnectedView wallet={extState.wallet} onDisconnect={disconnect} signingInProgress={extState.signingInProgress} />
+        <ConnectedView wallet={extState.wallet} onDisconnect={disconnect} signingInProgress={extState.signingInProgress} fingerprint={extState.sessionFingerprint} />
       </div>
     {:else if extState.phase === 'disconnected'}
       <div class="disconnected-view" role="status" aria-live="polite">

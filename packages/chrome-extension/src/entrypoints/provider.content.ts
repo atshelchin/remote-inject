@@ -42,6 +42,14 @@ export default defineContentScript({
     window.addEventListener('eip6963:requestProvider', announceProvider);
     announceProvider();
 
+    // Some dApps attach their EIP-6963 listener slightly after document_start, and
+    // others rebuild their wallet list only after a provider connects. Re-announce a
+    // couple of times early and whenever we transition to connected so Remote Inject
+    // stays discoverable with its current state.
+    setTimeout(announceProvider, 300);
+    setTimeout(announceProvider, 1000);
+    provider.on('connect', announceProvider);
+
     // --- window.ethereum injection (legacy support) ---
     const existingProvider = (window as any).ethereum;
 

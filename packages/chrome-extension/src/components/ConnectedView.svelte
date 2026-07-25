@@ -3,6 +3,7 @@
   import ActivityLog from './ActivityLog.svelte';
   import SigningToast from './SigningToast.svelte';
   import { getActivityLog, clearActivityLog } from '@/lib/storage';
+  import { chainLogoUrl, fallbackChainName, fetchChainName } from '@/lib/chain-meta';
   import { Copy, Check } from 'lucide-svelte';
   import { t } from '@/lib/i18n.svelte';
 
@@ -10,11 +11,21 @@
     wallet,
     onDisconnect,
     signingInProgress,
+    fingerprint,
   }: {
     wallet?: ConnectedWallet | null;
     onDisconnect: () => void;
     signingInProgress?: { method: string; origin: string };
+    fingerprint?: string;
   } = $props();
+
+  // Pairing code stays visible after connecting so it can be cross-checked
+  // against the bridge — matching codes prove both sides share one channel.
+  let pairingCode = $derived(
+    fingerprint && fingerprint.length >= 4
+      ? `${fingerprint.slice(0, 2)} ${fingerprint.slice(2, 4)}`
+      : fingerprint ?? '',
+  );
 
   let activity = $state<ActivityEntry[]>([]);
   let currentOrigin = $state<string | undefined>(undefined);
@@ -66,23 +77,26 @@
   let shortAddress = $derived(
     address ? `${address.slice(0, 6)}...${address.slice(-4)}` : t('Unknown', '未知'),
   );
-  let chainName = $derived(getChainName(wallet?.chainId ?? 1));
   let copied = $state(false);
 
-  function getChainName(id: number): string {
-    const chains: Record<number, string> = {
-      1: 'Ethereum',
-      10: 'Optimism',
-      56: 'BNB Chain',
-      100: 'Gnosis',
-      137: 'Polygon',
-      42161: 'Arbitrum',
-      8453: 'Base',
-      43114: 'Avalanche',
-      250: 'Fantom',
+  // Chain name + logo, upgraded from the canonical dataset once it resolves.
+  let chainName = $state('');
+  let chainLogo = $state('');
+  let chainLogoOk = $state(true);
+
+  $effect(() => {
+    const id = wallet?.chainId ?? 1;
+    chainName = fallbackChainName(id);
+    chainLogo = chainLogoUrl(id);
+    chainLogoOk = true;
+    let stale = false;
+    fetchChainName(id).then((n) => {
+      if (!stale) chainName = n;
+    });
+    return () => {
+      stale = true;
     };
-    return chains[id] ?? `Chain ${id}`;
-  }
+  });
 
   function copyAddress() {
     if (!address) return;
@@ -122,8 +136,20 @@
       </button>
     </div>
 
-    <div class="chain-badge">{chainName}</div>
+    <div class="chain-badge">
+      {#if chainLogo && chainLogoOk}
+        <img class="chain-logo" src={chainLogo} alt="" onerror={() => (chainLogoOk = false)} />
+      {/if}
+      <span class="chain-name">{chainName}</span>
+    </div>
   </div>
+
+  {#if pairingCode}
+    <div class="pairing-check" title={t('Both sides must show the same code', '两端应显示相同配对码')}>
+      <span class="pairing-label">{t('Pairing code', '配对码')}</span>
+      <span class="pairing-code">{pairingCode}</span>
+    </div>
+  {/if}
 
   <SigningToast method={signingInProgress?.method} origin={signingInProgress?.origin} />
   <ActivityLog entries={activity} filterOrigin={currentOrigin} onClear={handleClearActivity} />
@@ -245,7 +271,33 @@
     font-family: 'SF Mono', 'Fira Code', monospace;
   }
 
+  .pairing-check {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: 100%;
+    margin-top: -4px;
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+
+  .pairing-label {
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+  }
+
+  .pairing-code {
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-weight: 700;
+    letter-spacing: 2px;
+    color: var(--accent);
+  }
+
   .chain-badge {
+    display: flex;
+    align-items: center;
+    gap: 5px;
     font-size: 11px;
     font-weight: 500;
     color: var(--accent-hover);
@@ -253,6 +305,21 @@
     padding: 4px 10px;
     border-radius: 100px;
     flex-shrink: 0;
+    max-width: 120px;
+  }
+
+  .chain-logo {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    object-fit: cover;
+  }
+
+  .chain-name {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
   }
 
   .actions {
