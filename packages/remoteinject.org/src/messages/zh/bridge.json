@@ -5,7 +5,7 @@
   "bridge.nouri.getExtension": "获取扩展",
   "bridge.nouri.retry": "重试",
   "bridge.nowallet.title": "请在钱包中打开",
-  "bridge.nowallet.desc": "该 bridge 需在带有 dApp 浏览器的手机钱包中运行（MetaMask、OKX、TokenPocket、imToken、Trust 等）。请在钱包中打开以继续。",
+  "bridge.nowallet.desc": "该 bridge 需要用本页面中注入的钱包签名。请在带有 dApp 浏览器的手机钱包（MetaMask、OKX、Trust 等）中打开，或安装一个钱包扩展。",
   "bridge.nowallet.openMetamask": "在 MetaMask 中打开",
   "bridge.nowallet.copied": "已复制 ✓",
   "bridge.nowallet.copyLink": "复制链接到其他钱包",
@@ -20,5 +20,6 @@
   "bridge.connected.unstable": "连接不稳定——若请求卡住，请从桌面二维码重新打开。",
   "bridge.connected.keepOpen": "请保持本页打开。请求到达时在钱包中确认。",
   "bridge.error.title": "出错了",
-  "bridge.error.retry": "重试"
+  "bridge.error.retry": "重试",
+  "bridge.review.signWith": "使用钱包签名"
 }

@@ -5,7 +5,7 @@
   "bridge.nouri.getExtension": "Get the extension",
   "bridge.nouri.retry": "Retry",
   "bridge.nowallet.title": "Open inside a wallet",
-  "bridge.nowallet.desc": "This bridge must run inside a mobile wallet with a built-in dApp browser (MetaMask, OKX, TokenPocket, imToken, Trust…). Open it in your wallet to continue.",
+  "bridge.nowallet.desc": "This bridge signs with an injected wallet on this page. Open it inside a mobile wallet with a built-in dApp browser (MetaMask, OKX, Trust…), or install a wallet extension.",
   "bridge.nowallet.openMetamask": "Open in MetaMask",
   "bridge.nowallet.copied": "Copied ✓",
   "bridge.nowallet.copyLink": "Copy link for another wallet",
@@ -20,5 +20,6 @@
   "bridge.connected.unstable": "Connection unstable — if requests stall, reopen from the desktop QR.",
   "bridge.connected.keepOpen": "Keep this page open. Approve requests in your wallet as they arrive.",
   "bridge.error.title": "Something went wrong",
-  "bridge.error.retry": "Try again"
+  "bridge.error.retry": "Try again",
+  "bridge.review.signWith": "Sign with"
 }

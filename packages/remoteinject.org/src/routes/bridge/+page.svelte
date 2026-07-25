@@ -5,6 +5,15 @@
 
 	type Phase = 'loading' | 'no-uri' | 'no-wallet' | 'review' | 'connecting' | 'connected' | 'error';
 
+	interface InjectedWallet {
+		info: { uuid: string; name: string; icon: string; rdns: string };
+		provider: any;
+	}
+
+	// The bridge signs with a real injected wallet on THIS page — never Remote
+	// Inject itself (bridging to our own provider would loop forever).
+	const REMOTE_INJECT_RDNS = 'com.remote-inject.bridge';
+
 	let phase = $state<Phase>('loading');
 	let errorMsg = $state('');
 	let dapp = $state<{ name: string; url: string; icon: string } | null>(null);
@@ -12,11 +21,62 @@
 	let account = $state('');
 	let chainHex = $state('');
 	let logs = $state<{ dir: 'in' | 'out' | 'err'; text: string; time: string }[]>([]);
+	let wallets = $state<InjectedWallet[]>([]);
+	let selectedRdns = $state('');
 
 	let session: WalletSession | null = null;
 
+	const selectedWallet = $derived(
+		wallets.find((w) => w.info.rdns === selectedRdns) ?? wallets[0]
+	);
+
 	function eth(): any {
-		return (globalThis as any).ethereum;
+		return selectedWallet?.provider;
+	}
+
+	/**
+	 * Discover injected wallets via EIP-6963 (the bridge is a dApp). Remote Inject
+	 * is excluded — you can't bridge a wallet to itself. A legacy window.ethereum
+	 * that didn't announce (and isn't Remote Inject) is added as a fallback.
+	 */
+	function discoverWallets(): void {
+		const found = new Map<string, InjectedWallet>();
+		const add = (w: InjectedWallet | undefined) => {
+			if (!w?.info?.rdns || !w.provider) return;
+			if (w.info.rdns === REMOTE_INJECT_RDNS || w.provider.isRemoteInject) return;
+			if (found.has(w.info.rdns)) return;
+			found.set(w.info.rdns, w);
+			wallets = [...found.values()];
+			if (!selectedRdns) selectedRdns = w.info.rdns;
+			if (phase === 'loading') phase = 'review';
+		};
+
+		window.addEventListener('eip6963:announceProvider', (e: any) => add(e.detail));
+		window.dispatchEvent(new Event('eip6963:requestProvider'));
+
+		// Legacy window.ethereum fallback (skip if it's us or already announced).
+		const legacy = (globalThis as any).ethereum;
+		if (legacy && !legacy.isRemoteInject) {
+			setTimeout(() => {
+				const already = [...found.values()].some((w) => w.provider === legacy);
+				if (!already) {
+					add({
+						info: {
+							uuid: 'legacy',
+							name: legacy.isMetaMask ? 'MetaMask' : 'Injected wallet',
+							icon: '',
+							rdns: 'legacy.window.ethereum'
+						},
+						provider: legacy
+					});
+				}
+			}, 250);
+		}
+
+		// If nothing eligible announced, fall to the "open in a wallet" guidance.
+		setTimeout(() => {
+			if (phase === 'loading') phase = 'no-wallet';
+		}, 450);
 	}
 
 	function caip2From(hexChain: string): string {
@@ -55,13 +115,14 @@
 	}
 
 	onMount(() => {
+		pageUrl = location.href;
 		const uri = getPairingUri();
+		const target =
+			location.host + location.pathname + (uri ? '?uri=' + encodeURIComponent(uri) : location.hash);
+		mmLink = 'https://metamask.app.link/dapp/' + target;
+
 		if (!uri) {
 			phase = 'no-uri';
-			return;
-		}
-		if (!eth()) {
-			phase = 'no-wallet';
 			return;
 		}
 		try {
@@ -79,21 +140,23 @@
 			});
 			session.prepare(uri);
 			code = session.pairingCode;
-			phase = 'review';
 		} catch (e: any) {
 			errorMsg = e?.message ?? String(e);
 			phase = 'error';
+			return;
 		}
+		// Discover the local injected wallet(s) to sign with (moves to review/no-wallet).
+		discoverWallets();
 	});
 
 	async function connect() {
-		if (!session) return;
+		if (!session || !eth()) return;
 		phase = 'connecting';
 		try {
 			await session.confirm();
 			phase = 'connected';
-			await syncWalletState();
 			subscribeWalletEvents();
+			await authorizeAndSync();
 		} catch (e: any) {
 			errorMsg = e?.message ?? String(e);
 			phase = 'error';
@@ -118,9 +181,15 @@
 		}
 	}
 
-	async function syncWalletState() {
+	async function authorizeAndSync() {
 		try {
-			const accts = await eth().request({ method: 'eth_accounts' });
+			// Authorize the selected wallet so we have an account to relay. If it is
+			// already authorized, eth_accounts returns it without a prompt; otherwise
+			// prompt once with eth_requestAccounts.
+			let accts = await eth().request({ method: 'eth_accounts' });
+			if (!Array.isArray(accts) || accts.length === 0) {
+				accts = await eth().request({ method: 'eth_requestAccounts' });
+			}
 			account = Array.isArray(accts) ? (accts[0] ?? '') : '';
 			const cid = await eth().request({ method: 'eth_chainId' });
 			chainHex = cid;
@@ -129,7 +198,7 @@
 			session!.send({ event: 'chainChanged', data: cid }, caip);
 			if (account) session!.send({ event: 'accountsChanged', data: [account] as JsonValue });
 		} catch {
-			/* wallet may reject eth_accounts before authorization; ignore */
+			/* user may reject authorization — the dApp's own request will re-prompt */
 		}
 	}
 
@@ -151,18 +220,11 @@
 	}
 
 	// MetaMask (and most in-app browsers) open http(s) deep links but routinely
-	// drop the URL fragment, so carry the pairing URI as a query param the bridge
-	// also accepts (?uri=). Strip the scheme from the deep link host+path.
+	// drop the URL fragment, so the deep link (built in onMount) carries the
+	// pairing URI as a query param the bridge also accepts (?uri=).
 	let mmLink = $state('');
 	let pageUrl = $state('');
 	let copied = $state(false);
-	onMount(() => {
-		pageUrl = location.href;
-		const uri = getPairingUri();
-		const target =
-			location.host + location.pathname + (uri ? '?uri=' + encodeURIComponent(uri) : location.hash);
-		mmLink = 'https://metamask.app.link/dapp/' + target;
-	});
 
 	async function copyLink() {
 		try {
@@ -234,7 +296,24 @@
 				<p class="hint">
 					{t('bridge.review.hint')}
 				</p>
-				<button class="btn btn-primary big" onclick={connect} disabled={phase === 'connecting'}>
+
+				<label class="wallet-picker">
+					<span class="wallet-picker-label">{t('bridge.review.signWith')}</span>
+					{#if wallets.length > 1}
+						<select bind:value={selectedRdns} disabled={phase === 'connecting'}>
+							{#each wallets as w (w.info.rdns)}
+								<option value={w.info.rdns}>{w.info.name}</option>
+							{/each}
+						</select>
+					{:else}
+						<span class="wallet-picker-single">
+							{#if selectedWallet?.info.icon}<img src={selectedWallet.info.icon} alt="" />{/if}
+							{selectedWallet?.info.name ?? '—'}
+						</span>
+					{/if}
+				</label>
+
+				<button class="btn btn-primary big" onclick={connect} disabled={phase === 'connecting' || !selectedWallet}>
 					{#if phase === 'connecting'}<span class="spinner"></span> {t('bridge.review.connecting')}
 					{:else}{t('bridge.review.connect')}{/if}
 				</button>
@@ -332,6 +411,53 @@
 	.bridge-card {
 		width: 100%;
 		max-width: 380px;
+	}
+
+	.wallet-picker {
+		display: flex;
+		flex-direction: column;
+		gap: 6px;
+		text-align: left;
+		margin-bottom: 16px;
+	}
+
+	.wallet-picker-label {
+		font-size: 12px;
+		color: var(--color-text-muted);
+	}
+
+	.wallet-picker select {
+		width: 100%;
+		padding: 10px 12px;
+		font-size: 14px;
+		font-family: inherit;
+		color: var(--color-text-primary);
+		background: var(--color-bg-primary);
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-md);
+		outline: none;
+	}
+
+	.wallet-picker select:focus {
+		border-color: var(--color-accent);
+	}
+
+	.wallet-picker-single {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		padding: 10px 12px;
+		font-size: 14px;
+		font-weight: 500;
+		background: var(--color-bg-tertiary);
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-md);
+	}
+
+	.wallet-picker-single img {
+		width: 18px;
+		height: 18px;
+		border-radius: 4px;
 	}
 
 	.center-col {
