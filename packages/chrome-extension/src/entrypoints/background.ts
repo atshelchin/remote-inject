@@ -231,16 +231,26 @@ function attachSessionListeners() {
     updateState({ walletMeta: meta ? { name: meta.name, icon: meta.icon } : undefined });
   };
   const onEthereumEvent = (event: EthereumEvent) => handleEthereumEvent(sessionRef, event);
+  const onWalletLeft = () => {
+    // The pinned Wallet left the channel: surface an EIP-1193 disconnect and
+    // clear the connected-wallet state. The relay socket stays up for re-pairing.
+    connectedWallet = null;
+    saveConnectedWallet(null).catch((e) => console.warn('[RemoteInject]', e));
+    updateState({ wallet: undefined });
+    broadcastEvent('disconnect', { code: 4900, message: 'Wallet disconnected' });
+  };
 
   sessionRef.on('phase', onPhase);
   sessionRef.on('sessionFingerprint', onFingerprint);
   sessionRef.on('walletJoined', onWalletJoined);
+  sessionRef.on('walletLeft', onWalletLeft);
   sessionRef.on('ethereumEvent', onEthereumEvent);
 
   cleanupSessionListeners = () => {
     sessionRef.off('phase', onPhase);
     sessionRef.off('sessionFingerprint', onFingerprint);
     sessionRef.off('walletJoined', onWalletJoined);
+    sessionRef.off('walletLeft', onWalletLeft);
     sessionRef.off('ethereumEvent', onEthereumEvent);
   };
 }
@@ -422,7 +432,7 @@ function classifyMethod(method: string): ActivityEntry['category'] {
   if (['eth_requestAccounts', 'wallet_requestPermissions'].includes(method)) return 'auth';
   if (['personal_sign', 'eth_signTypedData', 'eth_signTypedData_v1', 'eth_signTypedData_v3', 'eth_signTypedData_v4'].includes(method)) return 'sign';
   if (['eth_sendTransaction', 'wallet_sendCalls'].includes(method)) return 'tx';
-  if (['eth_chainId', 'net_version', 'eth_accounts', 'wallet_getPermissions'].includes(method)) return 'local';
+  if (['eth_chainId', 'net_version', 'eth_accounts', 'wallet_getPermissions', 'wallet_getCapabilities'].includes(method)) return 'local';
   return 'read';
 }
 
@@ -521,6 +531,13 @@ async function handleRpcRequest(
       return { result: [{ parentCapability: 'eth_accounts' }] };
     }
     return { result: [] };
+  }
+
+  // ── wallet_getCapabilities (local) ─────────────────────────────────────
+  // Advertise no EIP-5792 capabilities so dApps use eth_sendTransaction. Relayed
+  // wallet_sendCalls does not reliably prompt a remote wallet for a signature.
+  if (method === 'wallet_getCapabilities') {
+    return { result: {} };
   }
 
   if (!explicitChainMatches(method, params, activeChainId)) {
