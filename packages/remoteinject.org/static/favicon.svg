@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" role="img" aria-label="Remote Inject">
+  <defs>
+    <linearGradient id="ri-tile" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FFB43A"/>
+      <stop offset="0.4" stop-color="#FF6E1C"/>
+      <stop offset="1" stop-color="#DC3305"/>
+    </linearGradient>
+    <linearGradient id="ri-gloss" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.16"/>
+      <stop offset="0.5" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+    <radialGradient id="ri-hl" cx="0.34" cy="0.26" r="0.9">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.20"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="128" height="128" rx="29" fill="url(#ri-tile)"/>
+  <rect width="128" height="128" rx="29" fill="url(#ri-hl)"/>
+  <rect width="128" height="128" rx="29" fill="url(#ri-gloss)"/>
+  <rect x="0.75" y="0.75" width="126.5" height="126.5" rx="28.25" fill="none" stroke="#ffffff" stroke-opacity="0.16" stroke-width="1.5"/>
+  <polygon points="73,16 41,69 59,69 51,112 87,57 69,57 83,16" fill="#ffffff"/>
+</svg>

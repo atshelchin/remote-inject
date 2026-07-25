@@ -1,0 +1,22 @@
+{
+  "playground.head.title": "Playground · Remote Inject",
+  "playground.head.description": "A live demo dApp to test Remote Inject end to end.",
+  "playground.hero.title": "Playground",
+  "playground.hero.lead": "A simulated dApp. With the Remote Inject extension installed and paired to your phone, connect below and try real requests — signatures and transactions are confirmed on your mobile wallet.",
+  "playground.notice.title": "No wallet provider detected",
+  "playground.notice.desc": "Install the Remote Inject extension (or any EIP-6963 wallet), then reload this page.",
+  "playground.notice.install": "Install extension",
+  "playground.notice.reload": "Reload",
+  "playground.connection.title": "Connection",
+  "playground.connection.providerLabel": "Provider",
+  "playground.connection.connect": "Connect wallet",
+  "playground.connection.pairingHint": "First time? The Remote Inject side panel opens for pairing — finish it on your phone, then your request continues.",
+  "playground.wallet.account": "Account",
+  "playground.wallet.chain": "Chain",
+  "playground.wallet.switchChain": "Switch chain",
+  "playground.requests.title": "Requests",
+  "playground.requests.messageLabel": "Message to sign",
+  "playground.requests.txNote": "The demo transaction sends 0 to your own address.",
+  "playground.log.title": "Request log",
+  "playground.log.empty": "No requests yet."
+}

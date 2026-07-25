@@ -54,10 +54,6 @@ jobs:
         if: steps.version.outputs.changed == 'true'
         run: bun install
 
-      - name: Build SDK dependency
-        if: steps.version.outputs.changed == 'true'
-        run: cd packages/sdk && bun run build
-
       - name: Build & Zip extension
         if: steps.version.outputs.changed == 'true'
         run: cd packages/chrome-extension && bun run zip
@@ -82,7 +78,7 @@ jobs:
           tag_name: extension-v${{ steps.version.outputs.current }}
           name: Chrome Extension v${{ steps.version.outputs.current }}
           body: |
-            ## Remote Inject Bridge - Chrome Extension v${{ steps.version.outputs.current }}
+            ## Remote Inject - Chrome Extension v${{ steps.version.outputs.current }}
 
             ### Install
             1. Download the `.zip` file below

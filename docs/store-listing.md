@@ -1,4 +1,4 @@
-# Chrome Web Store Listing — Remote Inject Bridge
+# Chrome Web Store Listing — Remote Inject
 
 > Copy-paste these into the Chrome Developer Dashboard.
 
@@ -8,58 +8,56 @@
 
 ### Name (45 chars max)
 ```
-Remote Inject Bridge
+Remote Inject
 ```
 
 ### Short Description (132 chars max)
 ```
-Use any web3 DApp on desktop while signing with your mobile wallet — no MetaMask or browser wallet required.
+Use any web3 dApp on desktop while signing with your mobile wallet — end-to-end encrypted, no browser wallet required.
 ```
 
 ### Detailed Description
 ```
-Most web3 DApps are built for browser wallet extensions like MetaMask. But what if your assets are on your phone, and you'd rather keep them there?
+Most web3 dApps are built for browser wallet extensions like MetaMask. But what if your assets live on your phone, and you'd rather keep them there?
 
-Remote Inject Bridge solves this. It makes any DApp on your desktop browser work with your mobile wallet — by injecting a virtual wallet provider into the page and forwarding every signing request to your phone in real time.
+Remote Inject makes any dApp on your desktop browser work with your mobile wallet. It injects a standard wallet provider into the page and tunnels every signing request to your phone over the open, end-to-end encrypted WalletPair protocol — no registration, no middleman, no keys on your desktop.
 
 WHY YOU SHOULD INSTALL IT
 
-• You use a mobile wallet (MetaMask Mobile, Trust Wallet, OKX Wallet, Rabby Mobile, etc.) and want to interact with DApps from your desktop without moving your assets to a browser wallet.
+• You use a mobile wallet with a built-in dApp browser (MetaMask, OKX, TokenPocket, imToken, Trust…) and want to interact with dApps from your desktop without moving your assets to a browser wallet.
 
-• The DApp you need doesn't support WalletConnect or its WalletConnect integration is broken. Remote Inject works at the browser level, so it's compatible with 100% of EIP-1193 DApps regardless of which wallet connectors they support.
+• You want to avoid installing another browser wallet extension. One lightweight bridge is all you need.
 
-• You want to avoid installing additional browser wallet extensions. One lightweight bridge extension is all you need.
+• You care about privacy: the relay forwards encrypted frames and sees only connection metadata — never your plaintext — and you can self-host it.
 
-• You're a developer testing a DApp against a real mobile wallet without switching devices.
-
-• You want full control: the relay server can be self-hosted so no third party ever sees your session data.
+• You're a developer testing a dApp against a real mobile wallet without switching devices.
 
 HOW IT WORKS
 
-1. Open the popup or side panel and connect to a relay server.
-2. Scan the QR code with your mobile wallet's built-in DApp browser.
-3. Done — the DApp on your desktop now talks directly to your mobile wallet. All transaction approvals, message signing, and chain switches happen on your phone.
+1. Open any dApp and click connect. Choose Remote Inject.
+2. Scan the QR code shown in the side panel with your mobile wallet — it opens the Remote Inject bridge page inside the wallet.
+3. Confirm the four-digit pairing code matches on both devices.
+4. Done — the dApp now talks to your mobile wallet. Every approval, message signature, and chain switch happens on your phone.
 
-The bridge uses Server-Sent Events (SSE) over HTTPS — no WebSocket ports, no local servers, nothing to configure.
+The channel is end-to-end encrypted with ChaCha20-Poly1305 over a single WebSocket relay. The relay cannot read your data.
 
 FEATURES
 
-• Compatible with any EIP-1193 DApp (Uniswap, OpenSea, Aave, and thousands more)
-• Supports MetaMask Mobile, Trust Wallet, OKX Wallet, imToken, and any mobile wallet with a built-in DApp browser
-• Side panel mode — keep the bridge visible while you browse
-• Auto-reconnect — the bridge restores automatically when you revisit a DApp
-• Activity log — track recent signing requests and their outcomes
-• Adaptive theme — light/dark mode follows the current webpage automatically
-• Bilingual UI — English and 中文 supported
-• Self-hostable relay server — full privacy, no lock-in
-• Open source: github.com/shelchin/remote-inject
+• Works with any EIP-1193 / EIP-6963 dApp (Uniswap, Aave, Polymarket, and thousands more)
+• Works with any mobile wallet that has a built-in dApp browser — you open the bridge page inside it
+• Side panel mode — keep the pairing and status visible while you browse
+• Auto-reconnect — the encrypted session restores automatically when you revisit a dApp
+• Activity log — review recent signing requests and their outcomes
+• Per-origin permissions — each site you connect is authorized individually
+• Public or self-hosted relay — default wss://relay.walletpair.org/v1, or point it at your own
+• Open source: github.com/atshelchin/remote-inject
 
 PERMISSIONS
 
-• storage — remembers your relay server URL and session so you don't need to re-scan on every visit
-• tabs — reads the page background color to match the popup theme (no page content is read or sent anywhere)
-• sidePanel — enables the side panel UI
-• offscreen — keeps the SSE connection alive in the background while you switch tabs
+• storage — remembers your relay URL, encrypted session state, and authorized origins so you don't re-scan on every visit
+• sidePanel — shows the pairing QR code and connection status
+• alarms — keeps the encrypted channel alive and reconnects after the service worker sleeps
+• host access (all sites) — injects the wallet provider into dApp pages so they can request a connection
 ```
 
 ### Category
@@ -78,56 +76,54 @@ English (en)
 
 ### 名称
 ```
-Remote Inject Bridge
+Remote Inject
 ```
 
 ### 简短描述（最多 132 个字符）
 ```
-在电脑浏览器上使用任意 Web3 DApp，用手机钱包完成签名——无需安装 MetaMask 等浏览器钱包插件。
+在电脑浏览器上使用任意 Web3 dApp，用手机钱包端到端加密地完成签名——无需安装浏览器钱包插件。
 ```
 
 ### 详细描述
 ```
-绝大多数 Web3 DApp 都是为 MetaMask 这类浏览器钱包插件设计的。但如果你的资产放在手机钱包里，又不想迁移到浏览器钱包，该怎么办？
+绝大多数 Web3 dApp 都是为 MetaMask 这类浏览器钱包插件设计的。但如果你的资产放在手机钱包里，又不想迁移到浏览器钱包，该怎么办？
 
-Remote Inject Bridge 就是为解决这个问题而生的。它在你的桌面浏览器中注入一个虚拟钱包提供方，将页面上的每一笔签名请求实时转发到你的手机，让任意 DApp 都能配合你的手机钱包使用。
+Remote Inject 让任意桌面浏览器中的 dApp 都能配合你的手机钱包使用。它在页面中注入一个标准钱包 provider，并通过开放、端到端加密的 WalletPair 协议把每一笔签名请求转发到你的手机——无需注册、没有中间人、桌面端不保存任何密钥。
 
 为什么值得安装
 
-• 你使用手机钱包（MetaMask Mobile、Trust Wallet、OKX Wallet、Rabby Mobile 等），想在电脑上操作 DApp，但不想把资产转移到浏览器钱包。
+• 你使用带有 dApp 浏览器的手机钱包（MetaMask、OKX、TokenPocket、imToken、Trust 等），想在电脑上操作 dApp，但不想把资产转移到浏览器钱包。
 
-• 你想用的 DApp 不支持 WalletConnect，或者其 WalletConnect 集成不稳定。Remote Inject 直接在浏览器层面工作，兼容 100% 符合 EIP-1193 标准的 DApp，无论该 DApp 支持哪些钱包连接方式。
+• 你不想再安装一个浏览器钱包插件。一个轻量级桥接插件就够了。
 
-• 你不想安装额外的浏览器钱包插件。一个轻量级桥接插件就够了。
+• 你重视隐私：中继只转发加密帧、只能看到连接元数据（看不到明文），而且可以自部署。
 
-• 你是开发者，需要在桌面端对真实的手机钱包进行 DApp 测试。
-
-• 你重视隐私：中继服务器可以自部署，没有任何第三方能看到你的会话数据。
+• 你是开发者，需要在桌面端对真实的手机钱包进行 dApp 测试。
 
 工作原理
 
-1. 打开弹窗或侧边栏，连接中继服务器。
-2. 用手机钱包内置的 DApp 浏览器扫描二维码。
-3. 完成 — 桌面端的 DApp 现在直接与你的手机钱包通信，所有交易确认、消息签名、切链操作均在手机上完成。
+1. 打开任意 dApp，点击连接，选择 Remote Inject。
+2. 用手机钱包扫描侧边栏中的二维码——它会在钱包内打开 Remote Inject bridge 页面。
+3. 核对两台设备上的四位配对码是否一致。
+4. 完成——dApp 现在直接与你的手机钱包通信，所有交易确认、消息签名、切链操作均在手机上完成。
 
-桥接通道基于 HTTPS 上的 SSE（Server-Sent Events），无需 WebSocket 端口，无需本地服务器，零配置。
+通道使用 ChaCha20-Poly1305 端到端加密，走单条 WebSocket 中继，中继无法读取你的数据。
 
 功能特性
 
-• 兼容所有符合 EIP-1193 标准的 DApp（Uniswap、OpenSea、Aave 等数千个）
-• 支持 MetaMask Mobile、Trust Wallet、OKX Wallet、imToken 及所有带内置 DApp 浏览器的手机钱包
-• 侧边栏模式 — 浏览网页时保持桥接面板常驻
-• 自动重连 — 回到 DApp 时自动恢复连接，无需重新扫码
-• 操作日志 — 实时查看签名请求及其状态
-• 自适应主题 — 亮色/暗色模式自动跟随当前网页切换
-• 中英双语界面
-• 中继服务器可自部署 — 完全掌控数据，不依赖任何第三方
-• 开源：github.com/shelchin/remote-inject
+• 兼容所有 EIP-1193 / EIP-6963 dApp（Uniswap、Aave、Polymarket 等数千个）
+• 兼容任意带有 dApp 浏览器的手机钱包——在其中打开 bridge 页面即可
+• 侧边栏模式——浏览网页时保持配对与状态常驻
+• 自动重连——回到 dApp 时自动恢复加密会话，无需重新扫码
+• 操作日志——查看签名请求及其状态
+• 按来源授权——每个连接的站点单独授权
+• 公共或自建中继——默认 wss://relay.walletpair.org/v1，也可指向你自己的中继
+• 开源：github.com/atshelchin/remote-inject
 
 权限说明
 
-• storage — 记住中继服务器地址和会话信息，下次访问 DApp 无需重新扫码
-• tabs — 读取当前页面背景色以匹配弹窗主题（不读取也不上传任何页面内容）
-• sidePanel — 启用侧边栏模式
-• offscreen — 在你切换标签页时保持 SSE 连接不断线
+• storage — 记住中继地址、加密会话状态与已授权来源，下次访问无需重新扫码
+• sidePanel — 显示配对二维码与连接状态
+• alarms — 保持加密通道存活，并在 Service Worker 休眠后重连
+• 主机访问（所有站点）— 向 dApp 页面注入钱包 provider，使其能发起连接请求
 ```

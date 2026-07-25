@@ -1,0 +1,10 @@
+{
+  "nav.install": "安装",
+  "nav.playground": "演练场",
+  "nav.docs": "文档",
+  "nav.language": "语言",
+  "nav.toggleTheme": "切换主题",
+  "nav.toggleNav": "切换导航菜单",
+  "global.head.title": "Remote Inject — 在任意桌面 dApp 上使用你的手机钱包",
+  "global.head.description": "Remote Inject 是一款浏览器扩展，通过开放、端到端加密的 WalletPair 协议，将任意桌面 dApp 桥接到你的手机钱包。无需注册，没有中间人。"
+}

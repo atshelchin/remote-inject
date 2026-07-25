@@ -1,0 +1,22 @@
+{
+  "playground.head.title": "演练场 · Remote Inject",
+  "playground.head.description": "一个可实时测试 Remote Inject 端到端流程的演示 dApp。",
+  "playground.hero.title": "演练场",
+  "playground.hero.lead": "一个模拟的 dApp。安装 Remote Inject 扩展并与手机配对后，在下方连接并尝试真实请求——签名与交易会在你的手机钱包中确认。",
+  "playground.notice.title": "未检测到钱包 provider",
+  "playground.notice.desc": "请安装 Remote Inject 扩展（或任意 EIP-6963 钱包），然后刷新本页。",
+  "playground.notice.install": "安装扩展",
+  "playground.notice.reload": "刷新",
+  "playground.connection.title": "连接",
+  "playground.connection.providerLabel": "Provider",
+  "playground.connection.connect": "连接钱包",
+  "playground.connection.pairingHint": "首次使用？Remote Inject 侧边栏会打开进行配对——在手机上完成后，你的请求会继续。",
+  "playground.wallet.account": "账户",
+  "playground.wallet.chain": "链",
+  "playground.wallet.switchChain": "切换链",
+  "playground.requests.title": "请求",
+  "playground.requests.messageLabel": "待签名消息",
+  "playground.requests.txNote": "演示交易向你自己的地址发送 0。",
+  "playground.log.title": "请求日志",
+  "playground.log.empty": "暂无请求。"
+}

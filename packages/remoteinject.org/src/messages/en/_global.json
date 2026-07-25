@@ -1,0 +1,10 @@
+{
+  "nav.install": "Install",
+  "nav.playground": "Playground",
+  "nav.docs": "Docs",
+  "nav.language": "Language",
+  "nav.toggleTheme": "Toggle theme",
+  "nav.toggleNav": "Toggle navigation",
+  "global.head.title": "Remote Inject — Use your phone wallet on any desktop dApp",
+  "global.head.description": "Remote Inject is a browser extension that bridges any desktop dApp to your mobile wallet over the open, end-to-end encrypted WalletPair protocol. No registration, no middleman."
+}
